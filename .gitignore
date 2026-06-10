@@ -1,7 +1,8 @@
-# Data (large; downloaded separately)
-data/
-!data/labeled/
-!data/labeled/.gitkeep
+# Data (large; downloaded separately) — anchored to repo root so it does not
+# match the src/emorecagent/data/ or tests/data/ Python packages.
+/data/
+!/data/labeled/
+!/data/labeled/.gitkeep
 
 # Caches / outputs
 *.cache
