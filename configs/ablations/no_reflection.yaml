@@ -1,0 +1,11 @@
+# Reflection Agent disabled (single forward pass). Isolates the reflection loop's
+# contribution to ranking quality and budget/complaint alignment.
+extends: ../default.yaml
+
+experiment:
+  name: no_reflection
+
+ablation:
+  reflection: false
+  dynamic_weights: true
+  aspect_term: true

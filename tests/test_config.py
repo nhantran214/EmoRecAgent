@@ -101,3 +101,29 @@ def test_missing_file_raises(monkeypatch):
     _set_env(monkeypatch)
     with pytest.raises(ConfigError, match="not found"):
         load_config("does/not/exist.yaml")
+
+
+def test_default_config_has_full_ablation(monkeypatch):
+    _set_env(monkeypatch)
+    cfg = load_config("configs/default.yaml")
+    assert cfg.ablation.reflection
+    assert cfg.ablation.dynamic_weights
+    assert cfg.ablation.aspect_term
+
+
+def test_ablation_overlay_extends_default(monkeypatch):
+    _set_env(monkeypatch)
+    cfg = load_config("configs/ablations/base_cf.yaml")
+    # overlay-only keys change; everything else inherits from default.yaml
+    assert cfg.experiment.name == "base_cf"
+    assert cfg.scoring.alpha == 1.0
+    assert cfg.ablation.aspect_term is False
+    assert cfg.data.category == "Beauty_and_Personal_Care"  # inherited
+
+
+def test_no_dynamic_weights_overlay(monkeypatch):
+    _set_env(monkeypatch)
+    cfg = load_config("configs/ablations/no_dynamic_weights.yaml")
+    assert cfg.ablation.dynamic_weights is False
+    assert cfg.ablation.reflection is True
+    assert cfg.ablation.aspect_term is True

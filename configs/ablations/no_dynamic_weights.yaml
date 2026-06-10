@@ -1,0 +1,11 @@
+# Static aspect weights (no time decay). Isolates the *dynamic/temporal* claim:
+# same aspects, same reflection, but w_u(a) is the lambda->0 static salience.
+extends: ../default.yaml
+
+experiment:
+  name: no_dynamic_weights
+
+ablation:
+  reflection: true
+  dynamic_weights: false
+  aspect_term: true

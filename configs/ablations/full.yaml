@@ -1,0 +1,10 @@
+# Full EmoRecAgent system — all mechanisms enabled (the headline method).
+extends: ../default.yaml
+
+experiment:
+  name: full
+
+ablation:
+  reflection: true
+  dynamic_weights: true
+  aspect_term: true

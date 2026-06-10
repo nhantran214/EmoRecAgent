@@ -74,6 +74,19 @@ class LlmCfg(_Strict):
     max_retries: int = 3
 
 
+class AblationCfg(_Strict):
+    """Factorial ablation toggles (U12). Full system = all enabled.
+
+    - reflection: run the Reflection Agent loop (off = single forward pass)
+    - dynamic_weights: time-decayed w_u(a,t) (off = static aspect weights)
+    - aspect_term: include the affective term (off = base CF only, i.e. alpha=1)
+    """
+
+    reflection: bool = True
+    dynamic_weights: bool = True
+    aspect_term: bool = True
+
+
 class Neo4jCfg(_Strict):
     uri: str
     user: str
@@ -93,12 +106,24 @@ class Config(_Strict):
     agents: AgentsCfg
     eval: EvalCfg
     llm: LlmCfg
+    ablation: AblationCfg = Field(default_factory=AblationCfg)
     neo4j: Neo4jCfg
     ollama: OllamaCfg
 
 
 class ConfigError(RuntimeError):
     """Raised when configuration is missing required values or is malformed."""
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively overlay `overlay` onto `base` (overlay wins on conflicts)."""
+    out = dict(base)
+    for key, val in overlay.items():
+        if isinstance(val, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], val)
+        else:
+            out[key] = val
+    return out
 
 
 def _require_env(name: str) -> str:
@@ -124,6 +149,17 @@ def load_config(path: str | Path = "configs/default.yaml") -> Config:
         raise ConfigError(f"Config file not found: {cfg_path}")
 
     raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+
+    # Overlay configs (e.g. ablation grids) declare `extends: <relative path>`
+    # and override only the keys that differ from the base config.
+    extends = raw.pop("extends", None)
+    if extends:
+        base_path = (cfg_path.parent / extends).resolve()
+        if not base_path.exists():
+            raise ConfigError(f"Base config referenced by 'extends' not found: {base_path}")
+        base_raw = yaml.safe_load(base_path.read_text(encoding="utf-8")) or {}
+        base_raw.pop("extends", None)
+        raw = _deep_merge(base_raw, raw)
 
     # Environment overlays for the LLM model name (keeps one source of truth).
     env_model = os.environ.get("LLM_MODEL")

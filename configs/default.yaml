@@ -56,3 +56,9 @@ llm:
   temperature: 0.0
   request_timeout_s: 120
   max_retries: 3
+
+# Factorial ablation toggles. The default config is the full system.
+ablation:
+  reflection: true
+  dynamic_weights: true
+  aspect_term: true

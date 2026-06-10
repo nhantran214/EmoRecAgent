@@ -1,0 +1,13 @@
+# Base CF corner: affective term off (alpha = 1). Isolates "aspects help at all".
+extends: ../default.yaml
+
+experiment:
+  name: base_cf
+
+scoring:
+  alpha: 1.0
+
+ablation:
+  reflection: false
+  dynamic_weights: false
+  aspect_term: false
