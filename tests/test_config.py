@@ -86,6 +86,8 @@ def test_env_model_overrides_yaml(tmp_path, monkeypatch):
 def test_missing_env_raises_clear_error(tmp_path, monkeypatch):
     for var in ("NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD", "OLLAMA_HOST"):
         monkeypatch.delenv(var, raising=False)
+    # Repo .env would repopulate vars; disable for this negative test.
+    monkeypatch.setattr("emorecagent.config.load_dotenv", lambda *a, **k: None)
     with pytest.raises(ConfigError, match="NEO4J_URI"):
         load_config(_write(tmp_path, _VALID_YAML))
 
