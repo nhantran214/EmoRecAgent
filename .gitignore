@@ -1,0 +1,40 @@
+# Data (large; downloaded separately)
+data/
+!data/labeled/
+!data/labeled/.gitkeep
+
+# Caches / outputs
+*.cache
+.cache/
+absa_cache/
+results/
+runs/
+*.parquet
+*.sqlite
+*.sqlite3
+
+# Env / secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Neo4j local volume
+neo4j_data/
+neo4j_logs/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

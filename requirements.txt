@@ -1,0 +1,31 @@
+# Core dataset download (existing)
+datasets>=2.14.0
+huggingface_hub>=0.20.0
+
+# Orchestration + local LLM
+# langgraph ships as a dependency of langchain 1.2; pin the co-release together.
+langchain>=1.2,<2
+langgraph>=1.1,<2
+langchain-ollama>=0.3,<1
+
+# Knowledge graph
+neo4j>=5.20,<6
+
+# Numerics / ML
+numpy>=1.26
+pandas>=2.0
+scikit-learn>=1.4
+pyarrow>=15.0
+
+# Eval / text
+rouge-score>=0.1.2
+
+# Config / infra
+pydantic>=2.6
+pydantic-settings>=2.2
+PyYAML>=6.0
+python-dotenv>=1.0
+tqdm>=4.66
+
+# Dev / test
+pytest>=8.0

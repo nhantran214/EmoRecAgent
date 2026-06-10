@@ -1,0 +1,58 @@
+# EmoRecAgent default experiment configuration.
+# All hyperparameters live here; the runner records the resolved config with results.
+
+experiment:
+  name: default
+  seed: 42
+
+data:
+  category: Beauty_and_Personal_Care
+  review_path: data/amazon-reviews-2023/raw/review_categories/Beauty_and_Personal_Care.jsonl
+  meta_path: data/amazon-reviews-2023/raw/meta_categories/meta_Beauty_and_Personal_Care.jsonl
+  out_dir: data/processed/Beauty_and_Personal_Care
+  # k-core filtering
+  k_core: 5
+  # Agentic subset caps (LLM-bound path). null = no cap.
+  max_users: 5000
+  max_items: 20000
+  # Minimum interaction history for a user to enter the agentic test set
+  # (the dynamic-weight effect cannot exist for near-cold users).
+  min_history: 5
+  min_distinct_aspects: 2
+
+scoring:
+  # S(u,i) = alpha * S_base + (1 - alpha) * sum_a w_u(a,t) * E_hat_i(a)
+  alpha: 0.5
+  # time-decay rate for the user preference weights (per day)
+  lambda_decay: 0.01
+  # signed (complaints push down) vs rescaled-[0,1] affective term
+  affective_rescaled: true
+  # cap on per-review helpfulness weighting in E_i aggregation (anti popularity bias)
+  helpful_vote_cap: 10
+
+cf:
+  backend: svd          # svd | itemknn
+  factors: 64
+
+absa:
+  cache_path: data/processed/Beauty_and_Personal_Care/absa_cache.sqlite
+  gold_path: data/labeled/absa_gold.jsonl
+  min_confidence: 0.5
+
+agents:
+  max_reflection_iters: 2
+  candidate_pool_size: 200
+  min_aspect_edges: 1
+  top_k_aspects: 5
+  default_budget: null   # user budget; null = no hard budget gate
+
+eval:
+  k_values: [5, 10, 20]
+  n_bootstrap: 1000
+  n_seeds: 3
+
+llm:
+  model: qwen2.5:7b
+  temperature: 0.0
+  request_timeout_s: 120
+  max_retries: 3
