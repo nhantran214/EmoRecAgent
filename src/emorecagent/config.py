@@ -11,6 +11,8 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -21,6 +23,8 @@ class _Strict(BaseModel):
 class ExperimentCfg(_Strict):
     name: str = "default"
     seed: int = 42
+    max_test_rows: int | None = None
+    use_llm_cot: bool = True
 
 
 class DataCfg(_Strict):
@@ -28,11 +32,15 @@ class DataCfg(_Strict):
     review_path: str
     meta_path: str
     out_dir: str
-    k_core: int = 5
+    k_core: int = 10
     max_users: int | None = None
     max_items: int | None = None
     min_history: int = 5
     min_distinct_aspects: int = 2
+    # Chronological split ratios (must sum to 1.0; never random).
+    split_train_ratio: float = 0.8
+    split_valid_ratio: float = 0.1
+    split_test_ratio: float = 0.1
 
 
 class ScoringCfg(_Strict):
@@ -48,9 +56,25 @@ class CfCfg(_Strict):
 
 
 class AbsaCfg(_Strict):
+    targets_path: str
     cache_path: str
     gold_path: str
+    summary_path: str = "results/absa_summary.json"
+    preview_html_path: str = "results/absa_preview.html"
+    backend: Literal["llm_only", "hybrid"] = "llm_only"
+    pipeline_version: str = "hybrid-v1"
+    classical_checkpoint: str = "multilingual"
+    classical_checkpoint_path: str | None = None
+    classical_device: Literal["auto", "cpu", "cuda"] = "auto"
+    classical_min_confidence: float = 0.85
+    repair_on_gap: bool = True
     min_confidence: float = 0.5
+    gold_n_samples: int = 750
+    gold_train_only: bool = True
+    gold_stratify_length: bool = True
+    min_aspect_support: int = 5
+    min_sentiment_support: int = 10
+    quality_gate_max_f1_drop: float = 0.02
 
 
 class AgentsCfg(_Strict):
@@ -61,21 +85,68 @@ class AgentsCfg(_Strict):
     default_budget: float | None = None
 
 
+class HgtCfg(_Strict):
+    graph_path: str = "data/processed/Beauty_and_Personal_Care/hgt/hgt_graph.pt"
+    aspect_vocab_path: str = (
+        "data/processed/Beauty_and_Personal_Care/hgt/aspect_vocab.json"
+    )
+    checkpoint_path: str = (
+        "data/processed/Beauty_and_Personal_Care/hgt/checkpoint.pt"
+    )
+    embeddings_dir: str = "data/processed/Beauty_and_Personal_Care/hgt/embeddings"
+    aspect_top_k: int = 100
+    text_encoder: str = "hash"
+    feature_dim: int = 64
+    pool_size: int = 50
+    n_layers: int = 2
+    n_heads: int = 8
+    n_hid: int = 256
+    dropout: float = 0.2
+    use_RTE: bool = True
+    epochs: int = 50
+    lr: float = 0.001
+    batch_size: int = 1024
+    neg_samples: int = 1
+    early_stop_patience: int = 5
+    device: str = "auto"
+
+
 class EvalCfg(_Strict):
     k_values: list[int] = Field(default_factory=lambda: [5, 10, 20])
+    hr_avg_k: list[int] = Field(default_factory=lambda: [1, 3, 5])
+    cumulative_history: bool = False
     n_bootstrap: int = 1000
     n_seeds: int = 3
+    verified_only: bool = True
+    # per_row: one ranking per test interaction (EmoRecAgent ablation default).
+    # user_batch: one ranking per user, multi-relevant ground truth (LightGCN-style).
+    protocol: Literal["per_row", "user_batch"] = "per_row"
+    # row_mean: average over test rows; user_mean: macro-average over users (paper table).
+    aggregation: Literal["row_mean", "user_mean"] = "row_mean"
+    # Additional sampled eval (1 positive + N negatives) alongside full-catalog pass.
+    n_negatives: int | None = 100
+    # Extra @K metrics for the sampled pass only (hr/mrr/ndcg/recall).
+    sampled_k_values: list[int] = Field(default_factory=lambda: [1, 3, 5])
 
 
 class LlmCfg(_Strict):
     model: str = "qwen2.5:7b"
+    # Offline ABSA (validate/repair); falls back to `model` when unset.
+    model_small: str | None = None
     temperature: float = 0.0
     request_timeout_s: int = 120
     max_retries: int = 3
 
 
+def resolve_llm_model(llm: LlmCfg, *, for_absa: bool = False) -> str:
+    """Pick agent model vs ABSA model (``LLM_MODEL`` / ``LLM_MODEL_SMALL``)."""
+    if for_absa and llm.model_small:
+        return llm.model_small
+    return llm.model
+
+
 class AblationCfg(_Strict):
-    """Factorial ablation toggles (U12). Full system = all enabled.
+    """Factorial ablation toggles. Full system = all enabled.
 
     - reflection: run the Reflection Agent loop (off = single forward pass)
     - dynamic_weights: time-decayed w_u(a,t) (off = static aspect weights)
@@ -107,6 +178,7 @@ class Config(_Strict):
     eval: EvalCfg
     llm: LlmCfg
     ablation: AblationCfg = Field(default_factory=AblationCfg)
+    hgt: HgtCfg = Field(default_factory=HgtCfg)
     neo4j: Neo4jCfg
     ollama: OllamaCfg
 
@@ -161,10 +233,14 @@ def load_config(path: str | Path = "configs/default.yaml") -> Config:
         base_raw.pop("extends", None)
         raw = _deep_merge(base_raw, raw)
 
-    # Environment overlays for the LLM model name (keeps one source of truth).
-    env_model = os.environ.get("LLM_MODEL")
-    if env_model and isinstance(raw.get("llm"), dict):
-        raw["llm"]["model"] = env_model
+    # Environment overlays for LLM model names (.env is source of truth).
+    if isinstance(raw.get("llm"), dict):
+        env_model = os.environ.get("LLM_MODEL")
+        if env_model:
+            raw["llm"]["model"] = env_model
+        env_model_small = os.environ.get("LLM_MODEL_SMALL")
+        if env_model_small:
+            raw["llm"]["model_small"] = env_model_small
 
     raw["neo4j"] = {
         "uri": _require_env("NEO4J_URI"),

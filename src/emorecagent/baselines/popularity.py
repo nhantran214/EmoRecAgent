@@ -1,4 +1,4 @@
-"""Global popularity baseline (U11).
+"""Global popularity baseline.
 
 User-independent: every user is scored by item interaction frequency in train.
 The weakest sanity baseline; a personalized method that cannot beat it is broken.

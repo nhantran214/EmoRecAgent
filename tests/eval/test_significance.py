@@ -1,4 +1,4 @@
-"""U12 significance tests: paired bootstrap and t-test on synthetic deltas."""
+"""Significance tests: paired bootstrap and t-test on synthetic deltas."""
 
 from __future__ import annotations
 

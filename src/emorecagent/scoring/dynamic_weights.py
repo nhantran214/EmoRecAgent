@@ -1,5 +1,5 @@
 """Dynamic, time-decayed aspect-preference weights w_u(a, t) — the core of the
-Dynamic Preference Shifting contribution (U6).
+Dynamic Preference Shifting contribution.
 
 For each new affective signal on aspect a at time t_k, the user's interest in a
 accumulates a time-decayed *salience* signal:
@@ -70,3 +70,20 @@ def compute_weights(
 def top_k_aspects(weights: dict[str, float], k: int) -> list[tuple[str, float]]:
     """The k highest-weight aspects, descending (ties broken by aspect name)."""
     return sorted(weights.items(), key=lambda kv: (-kv[1], kv[0]))[:k]
+
+
+def aspect_gammas(
+    signals: list[AspectSignal],
+    t_query_ms: int,
+    lambda_per_day: float,
+) -> dict[str, float]:
+    """Signed, time-decayed salience per aspect for HGT user embedding injection."""
+    out: dict[str, float] = defaultdict(float)
+    for s in signals:
+        if s.timestamp_ms >= t_query_ms:
+            continue
+        dt_days = (t_query_ms - s.timestamp_ms) / MS_PER_DAY
+        out[s.aspect] += (
+            s.polarity * intensity(s.polarity) * math.exp(-lambda_per_day * dt_days)
+        )
+    return dict(out)

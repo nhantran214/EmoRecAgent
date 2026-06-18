@@ -1,4 +1,4 @@
-"""Tests for U1 config loading (R12)."""
+"""Tests for config loading."""
 
 from __future__ import annotations
 
@@ -33,8 +33,17 @@ cf:
   backend: svd
   factors: 64
 absa:
+  targets_path: targets.jsonl
   cache_path: c.sqlite
   gold_path: g.jsonl
+  backend: llm_only
+  pipeline_version: hybrid-v1
+  classical_checkpoint: multilingual
+  classical_checkpoint_path: null
+  classical_device: auto
+  classical_min_confidence: 0.85
+  repair_on_gap: true
+  quality_gate_max_f1_drop: 0.02
   min_confidence: 0.5
 agents:
   max_reflection_iters: 2
@@ -83,6 +92,23 @@ def test_env_model_overrides_yaml(tmp_path, monkeypatch):
     assert cfg.llm.model == "qwen2.5:14b"
 
 
+def test_env_model_small_overrides_yaml(tmp_path, monkeypatch):
+    _set_env(monkeypatch)
+    monkeypatch.setenv("LLM_MODEL_SMALL", "qwen2.5:3b")
+    cfg = load_config(_write(tmp_path, _VALID_YAML))
+    assert cfg.llm.model_small == "qwen2.5:3b"
+    assert cfg.llm.model == "qwen2.5:7b"
+
+
+def test_resolve_llm_model_for_absa():
+    from emorecagent.config import LlmCfg, resolve_llm_model
+
+    llm = LlmCfg(model="qwen2.5:7b", model_small="qwen2.5:3b")
+    assert resolve_llm_model(llm, for_absa=True) == "qwen2.5:3b"
+    assert resolve_llm_model(llm, for_absa=False) == "qwen2.5:7b"
+    assert resolve_llm_model(LlmCfg(model="qwen2.5:7b"), for_absa=True) == "qwen2.5:7b"
+
+
 def test_missing_env_raises_clear_error(tmp_path, monkeypatch):
     for var in ("NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD", "OLLAMA_HOST"):
         monkeypatch.delenv(var, raising=False)
@@ -111,6 +137,23 @@ def test_default_config_has_full_ablation(monkeypatch):
     assert cfg.ablation.reflection
     assert cfg.ablation.dynamic_weights
     assert cfg.ablation.aspect_term
+
+
+def test_default_config_has_hgt_section(monkeypatch):
+    _set_env(monkeypatch)
+    cfg = load_config("configs/default.yaml")
+    assert cfg.hgt.pool_size == 50
+    assert cfg.hgt.text_encoder == "hash"
+
+
+def test_paper_baseline_config(monkeypatch):
+    _set_env(monkeypatch)
+    cfg = load_config("configs/paper_baseline.yaml")
+    assert cfg.eval.verified_only is False
+    assert cfg.eval.protocol == "user_batch"
+    assert cfg.eval.aggregation == "user_mean"
+    assert cfg.eval.k_values == [10, 20]
+    assert cfg.eval.n_negatives == 100
 
 
 def test_ablation_overlay_extends_default(monkeypatch):

@@ -1,4 +1,4 @@
-"""Typed KG repository — no Cypher outside this module (U5)."""
+"""Typed KG repository — no Cypher outside this module."""
 
 from __future__ import annotations
 
@@ -46,7 +46,8 @@ class KGRepository:
         MERGE (u:User {id: $user_id})
         MERGE (i:Item {asin: $item})
         MERGE (u)-[r:REVIEWED]->(i)
-        SET r.rating = $rating, r.ts = $ts, r.helpful_vote = $helpful_vote
+        SET r.rating = $rating, r.ts = $ts, r.helpful_vote = $helpful_vote,
+            r.verified_purchase = $verified_purchase
         """
         with self._driver.session() as session:
             session.run(
@@ -56,6 +57,7 @@ class KGRepository:
                 rating=interaction.rating,
                 ts=interaction.timestamp,
                 helpful_vote=interaction.helpful_vote,
+                verified_purchase=interaction.verified_purchase,
             )
 
     def upsert_triples(
@@ -85,7 +87,9 @@ class KGRepository:
         MERGE (u)-[s:SIGNAL {ts: $ts, item: $item_id}]->(a)
         SET s.polarity = row.polarity,
             s.opinion = row.opinion,
-            s.confidence = row.confidence
+            s.confidence = row.confidence,
+            s.item = $item_id,
+            s.ts = $ts
         """
         with self._driver.session() as session:
             session.run(
@@ -125,11 +129,55 @@ class KGRepository:
             result = session.run(query, item_id=item_id)
             return {rec["aspect"]: float(rec["score"]) for rec in result}
 
+    def get_aspect_support(self, item_id: str) -> dict[str, int]:
+        query = """
+        MATCH (i:Item {asin: $item_id})-[r:HAS_SENTIMENT]->(a:Aspect)
+        RETURN a.name AS aspect, r.n_support AS n_support
+        """
+        with self._driver.session() as session:
+            result = session.run(query, item_id=item_id)
+            return {rec["aspect"]: int(rec["n_support"]) for rec in result}
+
+    def get_user_absa_triples(self, user_id: str, before_ts: int) -> list[AbsaTriple]:
+        query = """
+        MATCH (u:User {id: $user_id})-[s:SIGNAL]->(a:Aspect)
+        WHERE s.ts < $before_ts
+        RETURN a.name AS aspect,
+               coalesce(s.polarity, 0.0) AS polarity,
+               coalesce(s.opinion, '') AS opinion,
+               coalesce(s.confidence, 1.0) AS confidence
+        ORDER BY s.ts
+        """
+        with self._driver.session() as session:
+            result = session.run(
+                query, user_id=user_id, before_ts=before_ts
+            )
+            triples: list[AbsaTriple] = []
+            for rec in result:
+                pol = float(rec["polarity"] or 0.0)
+                if pol > 0.1:
+                    sentiment = "positive"
+                elif pol < -0.1:
+                    sentiment = "negative"
+                else:
+                    sentiment = "neutral"
+                triples.append(
+                    AbsaTriple(
+                        aspect=str(rec["aspect"]),
+                        opinion=str(rec.get("opinion") or ""),
+                        sentiment=sentiment,
+                        confidence=float(rec.get("confidence") or 1.0),
+                    )
+                )
+            return triples
+
     def get_user_signals(self, user_id: str, before_ts: int) -> list[AspectSignal]:
         query = """
         MATCH (u:User {id: $user_id})-[s:SIGNAL]->(a:Aspect)
         WHERE s.ts < $before_ts
-        RETURN a.name AS aspect, s.polarity AS polarity, s.ts AS ts
+        RETURN a.name AS aspect,
+               coalesce(s.polarity, 0.0) AS polarity,
+               coalesce(s.ts, 0) AS ts
         ORDER BY s.ts
         """
         with self._driver.session() as session:
@@ -137,8 +185,8 @@ class KGRepository:
             return [
                 AspectSignal(
                     aspect=rec["aspect"],
-                    polarity=float(rec["polarity"]),
-                    timestamp_ms=int(rec["ts"]),
+                    polarity=float(rec["polarity"] or 0.0),
+                    timestamp_ms=int(rec["ts"] or 0),
                 )
                 for rec in result
             ]

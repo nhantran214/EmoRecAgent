@@ -1,4 +1,4 @@
-"""U12 claim-specific eval tests: shift-subpopulation selection + counterfactual."""
+"""Claim-specific eval tests: shift-subpopulation selection and counterfactual probe."""
 
 from __future__ import annotations
 

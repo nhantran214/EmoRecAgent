@@ -10,7 +10,7 @@ class Interaction:
     """A single user-item interaction (rating_only style, no review text).
 
     Review text is intentionally excluded to keep interaction sets small in
-    memory; ABSA (U4) reads raw review text separately by id.
+    memory; ABSA reads raw review text separately by id.
     """
 
     user_id: str

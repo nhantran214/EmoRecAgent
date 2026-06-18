@@ -1,5 +1,4 @@
-"""Claim-specific evaluation — the headline evidence for the temporal mechanism
-(U12 / R11).
+"""Claim-specific evaluation for the temporal preference-shifting mechanism.
 
 Aggregate ranking on a single held-out item cannot, by itself, demonstrate a
 *temporal* effect. Two targeted analyses do:

@@ -1,0 +1,103 @@
+{
+  "timestamp_utc": "2026-06-12T04:26:56.264157+00:00",
+  "run_id": "svd_seed42",
+  "config": {
+    "experiment": {
+      "name": "default",
+      "seed": 42
+    },
+    "data": {
+      "category": "Beauty_and_Personal_Care",
+      "review_path": "data/amazon-reviews-2023/raw/review_categories/Beauty_and_Personal_Care.jsonl",
+      "meta_path": "data/amazon-reviews-2023/raw/meta_categories/meta_Beauty_and_Personal_Care.jsonl",
+      "out_dir": "data/processed/Beauty_and_Personal_Care",
+      "k_core": 5,
+      "max_users": 5000,
+      "max_items": 20000,
+      "min_history": 5,
+      "min_distinct_aspects": 2,
+      "split_train_ratio": 0.8,
+      "split_valid_ratio": 0.1,
+      "split_test_ratio": 0.1
+    },
+    "scoring": {
+      "alpha": 0.5,
+      "lambda_decay": 0.01,
+      "affective_rescaled": true,
+      "helpful_vote_cap": 10
+    },
+    "cf": {
+      "backend": "svd",
+      "factors": 64
+    },
+    "absa": {
+      "targets_path": "data/processed/Beauty_and_Personal_Care/absa_targets.jsonl",
+      "cache_path": "data/processed/Beauty_and_Personal_Care/absa_cache.sqlite",
+      "gold_path": "data/labeled/absa_gold.jsonl",
+      "backend": "hybrid",
+      "pipeline_version": "hybrid-v1",
+      "classical_checkpoint": "multilingual",
+      "classical_checkpoint_path": null,
+      "classical_device": "auto",
+      "classical_min_confidence": 0.85,
+      "repair_on_gap": true,
+      "min_confidence": 0.5,
+      "gold_n_samples": 750,
+      "gold_train_only": true,
+      "gold_stratify_length": true,
+      "min_aspect_support": 5,
+      "min_sentiment_support": 10,
+      "quality_gate_max_f1_drop": 0.02
+    },
+    "agents": {
+      "max_reflection_iters": 2,
+      "candidate_pool_size": 200,
+      "min_aspect_edges": 1,
+      "top_k_aspects": 5,
+      "default_budget": null
+    },
+    "eval": {
+      "k_values": [
+        5,
+        10,
+        20
+      ],
+      "hr_avg_k": [
+        1,
+        3,
+        5
+      ],
+      "cumulative_history": false,
+      "n_bootstrap": 1000,
+      "n_seeds": 3
+    },
+    "llm": {
+      "model": "qwen2.5:7b",
+      "temperature": 0.0,
+      "request_timeout_s": 120,
+      "max_retries": 3
+    },
+    "ablation": {
+      "reflection": true,
+      "dynamic_weights": true,
+      "aspect_term": true
+    },
+    "neo4j": {
+      "uri": "bolt://localhost:7688",
+      "user": "neo4j",
+      "password": "emorecagent"
+    },
+    "ollama": {
+      "host": "http://localhost:11434"
+    }
+  },
+  "result_path": "results/svd.json",
+  "dataset_manifest": "f5e0b1f83734914d",
+  "ranking": "results/svd.json",
+  "extra": {
+    "method": "svd",
+    "n_negatives": null,
+    "cumulative_history": false,
+    "protocol": "full_catalog"
+  }
+}

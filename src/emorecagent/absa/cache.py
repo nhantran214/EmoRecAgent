@@ -1,4 +1,4 @@
-"""SQLite cache for ABSA triples keyed by review id (U4)."""
+"""SQLite cache for ABSA triples keyed by review id."""
 
 from __future__ import annotations
 
@@ -55,6 +55,20 @@ class AbsaCache:
             (review_id,),
         ).fetchone()
         return row is not None
+
+    def delete(self, review_id: str) -> bool:
+        cur = self._conn.execute(
+            "DELETE FROM absa_cache WHERE review_id = ?",
+            (review_id,),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def iter_all(self) -> list[tuple[str, TripleSet]]:
+        rows = self._conn.execute(
+            "SELECT review_id, triples_json FROM absa_cache ORDER BY review_id"
+        ).fetchall()
+        return [(rid, TripleSet.model_validate(json.loads(payload))) for rid, payload in rows]
 
     def close(self) -> None:
         self._conn.close()

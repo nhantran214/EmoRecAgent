@@ -1,15 +1,24 @@
-"""Swappable local LLM client with structured output and retries (U3)."""
+"""Swappable local LLM client with structured output and retries."""
 
 from __future__ import annotations
 
 import time
 from typing import Any, Protocol, TypeVar
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel, ValidationError
 
-from ..config import Config, LlmCfg
+from ..config import Config, LlmCfg, resolve_llm_model
+from .schemas import (
+    HybridAbsaVerdict,
+    TripleSet,
+    coerce_hybrid_verdict,
+    coerce_triple_set,
+    salvage_hybrid_verdict_from_error,
+    salvage_triple_set_from_error,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -86,13 +95,19 @@ class LLMClient:
         self.backoff_s = backoff_s
 
     @classmethod
-    def from_config(cls, cfg: Config | LlmCfg, *, host: str | None = None) -> "LLMClient":
+    def from_config(
+        cls,
+        cfg: Config | LlmCfg,
+        *,
+        host: str | None = None,
+        for_absa: bool = False,
+    ) -> "LLMClient":
         llm_cfg = cfg if isinstance(cfg, LlmCfg) else cfg.llm
         host = host or (cfg.ollama.host if isinstance(cfg, Config) else None)
         if host is None:
             raise LLMError("OLLAMA_HOST is required to build LLMClient")
         chat = ChatOllama(
-            model=llm_cfg.model,
+            model=resolve_llm_model(llm_cfg, for_absa=for_absa),
             base_url=host,
             temperature=llm_cfg.temperature,
             num_predict=2048,
@@ -119,10 +134,30 @@ class LLMClient:
             try:
                 result = structured.invoke([HumanMessage(content=prompt)])
                 if isinstance(result, schema):
-                    return result
-                return schema.model_validate(result)
-            except (ValidationError, ValueError, TypeError, RuntimeError) as exc:
+                    parsed = result
+                else:
+                    parsed = schema.model_validate(result)
+                if schema is TripleSet:
+                    return coerce_triple_set(parsed)  # type: ignore[return-value]
+                if schema is HybridAbsaVerdict:
+                    return coerce_hybrid_verdict(parsed)  # type: ignore[return-value]
+                return parsed
+            except (
+                ValidationError,
+                ValueError,
+                TypeError,
+                RuntimeError,
+                OutputParserException,
+            ) as exc:
                 last_err = exc
+                if schema is TripleSet:
+                    salvaged = salvage_triple_set_from_error(exc)
+                    if salvaged is not None:
+                        return salvaged  # type: ignore[return-value]
+                if schema is HybridAbsaVerdict:
+                    salvaged = salvage_hybrid_verdict_from_error(exc)
+                    if salvaged is not None:
+                        return salvaged  # type: ignore[return-value]
                 if attempt + 1 < self.max_retries:
                     time.sleep(self.backoff_s * (attempt + 1))
         raise LLMError(

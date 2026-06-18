@@ -1,4 +1,4 @@
-"""Paired significance testing for ranking deltas (U12 / R14).
+"""Paired significance testing for ranking metric deltas.
 
 Methods deltas (full vs ablation/baseline) are reported with a paired test over
 per-user metric values plus a bootstrap confidence interval, so the claimed

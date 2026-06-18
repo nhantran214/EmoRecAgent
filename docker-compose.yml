@@ -2,9 +2,10 @@ services:
   neo4j:
     image: neo4j:5.22
     container_name: emorecagent-neo4j
+    # Host ports 7475/7688 avoid clashing with other local Neo4j instances on 7474/7687.
     ports:
-      - "7474:7474"   # HTTP browser
-      - "7687:7687"   # Bolt
+      - "7475:7474"   # HTTP browser  -> http://localhost:7475
+      - "7688:7687"   # Bolt          -> bolt://localhost:7688
     environment:
       NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-emorecagent}"
       NEO4J_server_memory_heap_initial__size: "1G"

@@ -1,4 +1,4 @@
-"""Stage 1: candidate triple extraction (U4)."""
+"""Stage 1: candidate triple extraction."""
 
 from __future__ import annotations
 

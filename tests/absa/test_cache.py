@@ -23,3 +23,13 @@ def test_cache_miss_returns_none(tmp_path) -> None:
     cache = AbsaCache(tmp_path / "absa.sqlite")
     assert cache.get("missing") is None
     cache.close()
+
+
+def test_cache_delete(tmp_path) -> None:
+    cache = AbsaCache(tmp_path / "absa.sqlite")
+    cache.put("r1", TripleSet(triples=[]))
+    assert cache.contains("r1")
+    assert cache.delete("r1") is True
+    assert not cache.contains("r1")
+    assert cache.delete("r1") is False
+    cache.close()

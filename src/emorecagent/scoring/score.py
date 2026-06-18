@@ -1,4 +1,4 @@
-"""Dynamic Preference Shifting score S(u, i) (U7 / R5).
+"""Dynamic Preference Shifting score S(u, i).
 
     S(u, i) = alpha * S_base(u, i) + (1 - alpha) * sum_{a in A_u} w_u(a,t) * Ê_i(a)
 
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class ScoreBreakdown:
-    """Decomposition of S(u, i) for explanation (U10) and faithfulness (U12)."""
+    """Decomposition of S(u, i) for explanations and faithfulness checks."""
 
     total: float
     base_contribution: float  # alpha * S_base

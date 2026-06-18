@@ -1,4 +1,4 @@
-"""Stage 2: LLM-as-judge validation (U4)."""
+"""Stage 2: LLM-as-judge validation."""
 
 from __future__ import annotations
 

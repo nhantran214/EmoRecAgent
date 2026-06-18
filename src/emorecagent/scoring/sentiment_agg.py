@@ -1,4 +1,4 @@
-"""Item-aspect sentiment aggregation: E_i(a) and its [0, 1] rescale Ê_i(a) (U7).
+"""Item-aspect sentiment aggregation: E_i(a) and its [0, 1] rescale Ê_i(a).
 
 E_raw is a helpfulness-capped mean polarity in [-1, 1]; rescaling to [0, 1]
 (via (x+1)/2) keeps the affective term on the same scale as the CF base so the

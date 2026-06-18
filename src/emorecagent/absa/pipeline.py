@@ -1,11 +1,17 @@
-"""ABSA extract → judge → normalize pipeline (U4)."""
+"""ABSA pipeline: text processor + normalize + cache."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
+from ..config import AbsaCfg, Config, ConfigError
+from ..llm.client import LLMClient
 from ..llm.schemas import AbsaTriple, TripleSet
+from .agent import HybridAbsaAgent, HybridAgentStats
 from .cache import AbsaCache
+from .cache_manifest import ensure_cache_manifest, write_manifest
+from .classical import ClassicalAbsaTool, MockClassicalAbsaTool, PyAbsaClassicalTool, require_absa_ml
 from .extractor import AbsaExtractor
 from .judge import AbsaJudge
 from .normalize import normalize_aspect
@@ -17,15 +23,57 @@ class ReviewRecord:
     text: str
 
 
+class AbsaTextProcessor(Protocol):
+    def process_text(self, text: str) -> list[AbsaTriple]: ...
+
+
+@dataclass
+class LlmOnlyProcessor:
+    extractor: AbsaExtractor
+    judge: AbsaJudge
+
+    def process_text(self, text: str) -> list[AbsaTriple]:
+        candidates = self.extractor.extract(text).triples
+        return self.judge.judge(text, candidates).triples
+
+
+@dataclass
+class HybridProcessor:
+    agent: HybridAbsaAgent
+
+    def process_text(self, text: str) -> list[AbsaTriple]:
+        return self.agent.process(text).triples
+
+    @property
+    def stats(self) -> HybridAgentStats:
+        return self.agent.stats
+
+
+def _finalize_triples(triples: list[AbsaTriple]) -> TripleSet:
+    normalized = [
+        AbsaTriple(
+            aspect=normalize_aspect(t.aspect),
+            opinion=t.opinion,
+            sentiment=t.sentiment,
+            confidence=t.confidence,
+        )
+        for t in triples
+    ]
+    best: dict[tuple[str, str], AbsaTriple] = {}
+    for t in normalized:
+        key = (t.aspect, t.sentiment)
+        if key not in best or t.confidence > best[key].confidence:
+            best[key] = t
+    return TripleSet(triples=list(best.values()))
+
+
 class AbsaPipeline:
     def __init__(
         self,
-        extractor: AbsaExtractor,
-        judge: AbsaJudge,
+        processor: AbsaTextProcessor,
         cache: AbsaCache | None = None,
     ) -> None:
-        self.extractor = extractor
-        self.judge = judge
+        self.processor = processor
         self.cache = cache
 
     def process(self, record: ReviewRecord, *, use_cache: bool = True) -> TripleSet:
@@ -34,25 +82,67 @@ class AbsaPipeline:
             if hit is not None:
                 return hit
 
-        candidates = self.extractor.extract(record.text).triples
-        validated = self.judge.judge(record.text, candidates).triples
-        normalized = [
-            AbsaTriple(
-                aspect=normalize_aspect(t.aspect),
-                opinion=t.opinion,
-                sentiment=t.sentiment,
-                confidence=t.confidence,
-            )
-            for t in validated
-        ]
-        # de-duplicate by (aspect, sentiment) keeping highest confidence
-        best: dict[tuple[str, str], AbsaTriple] = {}
-        for t in normalized:
-            key = (t.aspect, t.sentiment)
-            if key not in best or t.confidence > best[key].confidence:
-                best[key] = t
-        result = TripleSet(triples=list(best.values()))
+        validated = self.processor.process_text(record.text)
+        result = _finalize_triples(validated)
 
         if use_cache and self.cache is not None:
             self.cache.put(record.review_id, result)
         return result
+
+
+def build_absa_pipeline(
+    cfg: Config,
+    client: LLMClient,
+    *,
+    cache: AbsaCache | None = None,
+    classical_tool: ClassicalAbsaTool | None = None,
+    skip_manifest_check: bool = False,
+) -> AbsaPipeline:
+    absa = cfg.absa
+    if not skip_manifest_check:
+        ensure_cache_manifest(absa.cache_path, absa.pipeline_version)
+
+    if absa.backend == "llm_only":
+        processor: AbsaTextProcessor = LlmOnlyProcessor(
+            AbsaExtractor(client),
+            AbsaJudge(client, min_confidence=absa.min_confidence),
+        )
+    elif absa.backend == "hybrid":
+        if classical_tool is not None:
+            tool = classical_tool
+        else:
+            require_absa_ml()
+            tool = PyAbsaClassicalTool.from_config(absa)
+        agent = HybridAbsaAgent(
+            tool,
+            client,
+            min_confidence=absa.min_confidence,
+            classical_min_confidence=absa.classical_min_confidence,
+            repair_on_gap=absa.repair_on_gap,
+        )
+        processor = HybridProcessor(agent)
+    else:
+        raise ConfigError(f"Unknown absa.backend: {absa.backend!r}")
+
+    cache_obj = cache or AbsaCache(absa.cache_path)
+    write_manifest(absa.cache_path, absa.pipeline_version)
+    return AbsaPipeline(processor, cache=cache_obj)
+
+
+def build_mock_hybrid_pipeline(
+    client: LLMClient,
+    classical_tool: MockClassicalAbsaTool,
+    *,
+    cache: AbsaCache | None = None,
+    min_confidence: float = 0.5,
+    classical_min_confidence: float = 0.85,
+    repair_on_gap: bool = True,
+) -> AbsaPipeline:
+    agent = HybridAbsaAgent(
+        classical_tool,
+        client,
+        min_confidence=min_confidence,
+        classical_min_confidence=classical_min_confidence,
+        repair_on_gap=repair_on_gap,
+    )
+    return AbsaPipeline(HybridProcessor(agent), cache=cache)

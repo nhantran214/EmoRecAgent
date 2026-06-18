@@ -6,7 +6,14 @@ from emorecagent.absa.cache import AbsaCache
 from emorecagent.absa.extractor import AbsaExtractor
 from emorecagent.absa.judge import AbsaJudge
 from emorecagent.absa.normalize import normalize_aspect
-from emorecagent.absa.pipeline import AbsaPipeline, ReviewRecord
+from emorecagent.absa.classical import MockClassicalAbsaTool
+from emorecagent.absa.pipeline import (
+    AbsaPipeline,
+    LlmOnlyProcessor,
+    ReviewRecord,
+    build_mock_hybrid_pipeline,
+)
+from emorecagent.llm.schemas import HybridAbsaVerdict
 from emorecagent.absa.quality import triple_f1
 from emorecagent.llm.client import FakeLLM, LLMClient
 from emorecagent.llm.schemas import AbsaTriple, TripleSet
@@ -37,8 +44,10 @@ def _battery_judge() -> str:
 def _pipeline(fake: FakeLLM, cache: AbsaCache | None = None) -> AbsaPipeline:
     client = LLMClient(fake)
     return AbsaPipeline(
-        AbsaExtractor(client),
-        AbsaJudge(client, min_confidence=0.5),
+        LlmOnlyProcessor(
+            AbsaExtractor(client),
+            AbsaJudge(client, min_confidence=0.5),
+        ),
         cache=cache,
     )
 
@@ -78,6 +87,40 @@ def test_partial_run_resumes_without_duplicate(tmp_path) -> None:
     fake2 = FakeLLM([])
     out = _pipeline(fake2, cache).process(ReviewRecord("r1", BATTERY_REVIEW))
     assert len(out.triples) == 2
+
+
+def test_hybrid_mock_pipeline_caches_second_call(tmp_path) -> None:
+    cache = AbsaCache(tmp_path / "c.sqlite")
+    tool = MockClassicalAbsaTool(
+        [
+            AbsaTriple(
+                aspect="battery",
+                opinion="",
+                sentiment="positive",
+                confidence=0.95,
+            ),
+        ]
+    )
+    verdict = HybridAbsaVerdict(
+        triples=[
+            AbsaTriple(
+                aspect="battery",
+                opinion="lasts",
+                sentiment="positive",
+                confidence=0.9,
+            ),
+        ],
+        needs_repair=False,
+    )
+    fake = FakeLLM([verdict.model_dump_json()])
+    pipe = build_mock_hybrid_pipeline(LLMClient(fake), tool, cache=cache)
+    rec = ReviewRecord("h1", BATTERY_REVIEW)
+    pipe.process(rec)
+    fake2 = FakeLLM([])
+    pipe2 = build_mock_hybrid_pipeline(LLMClient(fake2), tool, cache=cache)
+    out = pipe2.process(rec)
+    assert len(out.triples) == 1
+    assert out.triples[0].aspect == "battery"
 
 
 def test_quality_f1_hand_computed() -> None:

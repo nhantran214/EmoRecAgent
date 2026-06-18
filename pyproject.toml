@@ -9,6 +9,43 @@ description = "EmoRecAgent — Multi-Agent Affective Recommendation Framework (L
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+dependencies = [
+    "datasets>=2.14.0",
+    "huggingface_hub>=0.20.0",
+    "langchain>=1.2,<2",
+    "langgraph>=1.1,<2",
+    "langchain-ollama>=0.3,<1",
+    "neo4j>=5.20,<6",
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "scikit-learn>=1.4",
+    "pyarrow>=15.0",
+    "rouge-score>=0.1.2",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "PyYAML>=6.0",
+    "python-dotenv>=1.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+absa-ml = [
+    "pyabsa==2.4.2",
+    "torch>=2.0",
+    # PyABSA 2.4.x needs transformers 4.x (not 5.x); 4.30+ has py3.12 wheels.
+    "transformers>=4.25,<4.45",
+    # metric_visualizer calls UpdateChecker.check(name, ver); 1.x is keyword-only.
+    "update-checker>=0.16,<1.0",
+]
+hgt = [
+    "torch>=2.0",
+    "torch-geometric>=2.5",
+    "sentence-transformers>=2.7",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

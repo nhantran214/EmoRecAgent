@@ -1,4 +1,4 @@
-"""U12 faithfulness tests: ERASER-style perturbation + unfaithful control."""
+"""Faithfulness tests: ERASER-style perturbation and unfaithful control."""
 
 from __future__ import annotations
 

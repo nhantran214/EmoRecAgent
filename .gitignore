@@ -1,41 +1,107 @@
-# Data (large; downloaded separately) — anchored to repo root so it does not
-# match the src/emorecagent/data/ or tests/data/ Python packages.
-/data/
-!/data/labeled/
-!/data/labeled/.gitkeep
+# =============================================================================
+# EmoRecAgent — GitHub-safe ignores (code + configs in repo; data local)
+# =============================================================================
 
-# Caches / outputs
+# --- Raw & processed datasets (download: scripts/download_amazon_reviews.py) ---
+/data/raw/
+/data/processed/
+/data/cache/
+/data/downloads/
+/data/**/*.jsonl
+/data/**/*.parquet
+/data/**/*.sqlite
+/data/**/*.sqlite3
+/data/**/*.sqlite-journal
+
+# ABSA / HGT artifacts under data/
+/data/**/absa_cache/
+/data/**/hgt/
+/data/**/*.pt
+/data/**/*.manifest.json
+
+# Gold-label workflow: keep README + small JSONL in repo if you choose
+!data/labeled/
+!data/labeled/**
+
+# --- Run outputs ---
+results/
+runs/
+logs/
+*.log
+
+# --- Caches ---
 *.cache
 .cache/
 absa_cache/
-results/
-runs/
-*.parquet
-*.sqlite
-*.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
 
-# Env / secrets
+# --- Model checkpoints & embeddings (train locally) ---
+checkpoints/
+**/checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+**/embeddings/
+**/*_embeddings.npy
+*.npy
+!tests/**/*.npy
+
+# --- Baseline vendored repos: code may be tracked; artifacts stay local ---
+baseline/**/storage/
+baseline/**/dataset/
+baseline/**/datasets/
+baseline/**/saved/
+baseline/**/wandb/
+baseline/**/*.inter
+baseline/**/*.pkl
+baseline/**/ml-1m*/
+baseline/**/ml-1m_default/
+
+# Nested baseline git dirs (clone separately; do not push as subtree)
+baseline/**/.git/
+
+# --- Neo4j local volume ---
+neo4j_data/
+neo4j_logs/
+
+# --- Secrets / local env ---
 .env
 .env.local
+.env.*.local
+!.env.example
 
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .eggs/
 build/
 dist/
 .venv/
 venv/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
 
-# Neo4j local volume
-neo4j_data/
-neo4j_logs/
-
-# OS / editor
+# --- Tooling / editor (local) ---
 .DS_Store
 .idea/
 .vscode/
+.cursor/
+.compound-engineering/config.local.yaml
+
+# --- Experiment trackers ---
+wandb/
+.mlflow/
+
+# --- Large archives ---
+*.jsonl.gz
+*.tar.gz
+*.tgz
+*.zip

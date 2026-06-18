@@ -1,4 +1,4 @@
-"""Neo4j constraints and indexes (U5).
+"""Neo4j constraints and indexes.
 
 Idempotent: safe to re-run on an existing database.
 """
