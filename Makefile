@@ -161,6 +161,23 @@ agent4rec-paper-py39: agent4rec-setup-py39
 		--config baseline/Agent4Rec/configs/paper_agent4rec.yaml \
 		--out results/paper/agent4rec.json
 
+# Protocol B — AgentCF full pipeline (RecBole train + native eval + comparison eval).
+# Requires conda env with recbole (e.g. A4R-baseline). Comparison eval needs ERA 3.11+ / emorecagent.
+agentcf-setup:
+	$(PYTHON) -m pip install -r baseline/AgentCF/requirements-amazon.txt
+
+agentcf-paper: agentcf-setup
+	@mkdir -p baseline/AgentCF/logs results/paper baseline/AgentCF/checkpoints
+	PYTHONUNBUFFERED=1 $(PYTHON) baseline/AgentCF/amazon/run_experiment.py \
+		--config baseline/AgentCF/configs/paper_agentcf.yaml \
+		--out results/paper/agentcf.json
+
+agentcf-paper-debug: agentcf-setup
+	@mkdir -p baseline/AgentCF/logs results/paper baseline/AgentCF/checkpoints
+	PYTHONUNBUFFERED=1 $(PYTHON) baseline/AgentCF/amazon/run_experiment.py \
+		--config baseline/AgentCF/configs/paper_agentcf_debug.yaml \
+		--out results/paper/agentcf_debug.json
+
 ablations:
 	@mkdir -p $(LOG_DIR) results/ablations
 	@for cfg in configs/ablations/*.yaml; do \
