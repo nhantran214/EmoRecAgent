@@ -1,0 +1,23 @@
+# Yelp_AC Stage-2 (full EmoRecAgent) on AC-TSR no-review protocol.
+extends: Yelp_AC.yaml
+
+experiment:
+  name: emorecagent_align_Yelp_AC
+
+eval:
+  protocol: user_batch
+  aggregation: user_mean
+  k_values: [10, 20]
+  hr_avg_k: [1, 3, 5]
+
+tisasrec_align:
+  use_hash_encoder: true
+  stage1_only: false
+  stage2_mode: rerank
+  rerank_pool_k: 100
+  llm_pool_cap: 40
+  guardrail_mode: reorder_head
+  reorder_head_n: 10
+  # Metadata-derived T_u / ID-only co-visit (no ABSA).
+  preference_source: item_metadata
+  cross_user_mode: id_only

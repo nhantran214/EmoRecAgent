@@ -1,4 +1,4 @@
-"""Collaborative-filtering base score S_base(u, i) (U7 / KTD5).
+"""Collaborative-filtering base score S_base(u, i).
 
 Computed classically (not by the LLM) from the train-split interactions, which
 are read from the split files — never pulled through Cypher. Two backends:

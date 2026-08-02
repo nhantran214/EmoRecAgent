@@ -1,4 +1,4 @@
-"""U12 ranking-metric tests, validated against hand-computed values."""
+"""Ranking-metric tests validated against hand-computed values."""
 
 from __future__ import annotations
 
@@ -54,6 +54,10 @@ def test_mrr_is_reciprocal_of_first_hit_rank(ranked: list[str]) -> None:
 def test_evaluate_ranking_returns_all_metrics(ranked: list[str]) -> None:
     out = M.evaluate_ranking(ranked, {"x"}, 3)
     assert set(out) == {"recall", "ndcg", "hr", "mrr"}
+
+
+def test_hr_equals_recall_single_relevant(ranked: list[str]) -> None:
+    assert M.hr_at_k(ranked, {"x"}, 3) == M.recall_at_k(ranked, {"x"}, 3)
 
 
 def test_empty_relevant_is_zero(ranked: list[str]) -> None:

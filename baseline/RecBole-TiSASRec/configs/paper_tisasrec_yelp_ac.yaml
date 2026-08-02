@@ -1,0 +1,37 @@
+# Protocol B — AC-TSR / RecBole TiSASRec (CE) on Yelp_AC.
+#
+# Vendored RecBole fork from AIM-SE/AC-TSR (official paper code). Full-catalog
+# CE + LOO, shared recipe from config_t.yaml. NOT EmoRecAgent Stage-1 and NOT
+# baseline/TiSASRec.pytorch (BCE).
+#
+# AC-TSR Table 1 target (TiSASRec, Yelp):
+#   Recall@10=0.0618  Recall@20=0.0909  NDCG@10=0.0387  NDCG@20=0.0460
+
+experiment:
+  name: recbole_tisasrec_yelp_ac
+  seed: 42
+
+data:
+  category: Yelp_AC
+  processed_dir: data/processed/Yelp_AC
+  # RecBole atomic dataset name (folder under baseline/.../dataset/).
+  dataset_name: Yelp_AC
+
+model:
+  # Overrides applied on top of configs/TiSASRec.yaml + config_t.yaml.
+  # Leave null to use paper defaults (2/2/64, inner 256, CE, time_span 256).
+  n_layers: 2
+  n_heads: 2
+  hidden_size: 64
+  inner_size: 256
+  epochs: 200
+  train_batch_size: 256
+  learning_rate: 0.0001
+
+eval:
+  # RecBole full-ranking LOO (Hit/Recall/NDCG@10/20). Primary report uses
+  # RecBole test metrics; optional Protocol-B pass can be added later.
+  topk: [10, 20]
+
+logging:
+  log_dir: logs

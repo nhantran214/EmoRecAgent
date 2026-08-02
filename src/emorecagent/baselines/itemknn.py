@@ -1,6 +1,6 @@
-"""ItemKNN baseline (U11).
+"""ItemKNN baseline.
 
-Thin wrapper over the shared CFBase cosine ItemKNN backend (U7).
+Thin wrapper over the shared CFBase cosine ItemKNN backend.
 """
 
 from __future__ import annotations

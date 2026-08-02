@@ -1,4 +1,4 @@
-"""Stage 1: candidate triple extraction (U4)."""
+"""Stage 1: candidate triple extraction."""
 
 from __future__ import annotations
 
@@ -13,4 +13,4 @@ class AbsaExtractor:
 
     def extract(self, review_text: str) -> TripleSet:
         prompt = format_prompt(ABSA_EXTRACT_V1, review_text=review_text)
-        return self._client.invoke_structured(prompt, TripleSet)
+        return self._client.invoke_structured(prompt, TripleSet, max_tokens=1024)

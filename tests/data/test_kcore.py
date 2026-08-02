@@ -1,8 +1,8 @@
-"""Tests for U2 dedup + k-core filtering (R1)."""
+"""Tests for dedup and k-core filtering."""
 
 from __future__ import annotations
 
-from emorecagent.data.kcore import k_core_filter
+from emorecagent.data.kcore import k_core_filter, k_core_summary
 from emorecagent.data.loader import dedup_earliest
 from emorecagent.data.types import Interaction
 
@@ -44,6 +44,29 @@ def test_kcore_removes_low_degree_until_stable():
     assert users == {"u1", "u2", "u3"} and items == {"i1", "i2"}
     # Every surviving node has degree >= 2.
     assert len(kept) == 6
+
+
+def test_kcore_5_requires_five_reviews_per_user_and_item():
+    """5-core: every surviving user/item has degree >= 5."""
+    data = []
+    # Dense 5x5 block: 5 users each review 5 items -> all survive 5-core.
+    users = [f"u{i}" for i in range(5)]
+    items = [f"i{j}" for j in range(5)]
+    for u in users:
+        for it in items:
+            data.append(_mk(u, it, ts=1))
+    # Sparse outliers must be pruned.
+    data.append(_mk("u_sparse", "i0", ts=2))
+    data.append(_mk("u0", "i_sparse", ts=2))
+
+    kept = k_core_filter(data, 5)
+    summary = k_core_summary(kept, 5)
+    assert summary.min_user_degree >= 5
+    assert summary.min_item_degree >= 5
+    assert summary.n_users == 5
+    assert summary.n_items == 5
+    assert "u_sparse" not in {i.user_id for i in kept}
+    assert "i_sparse" not in {i.item for i in kept}
 
 
 def test_kcore_cascade_can_empty():

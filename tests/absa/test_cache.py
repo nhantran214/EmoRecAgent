@@ -23,3 +23,30 @@ def test_cache_miss_returns_none(tmp_path) -> None:
     cache = AbsaCache(tmp_path / "absa.sqlite")
     assert cache.get("missing") is None
     cache.close()
+
+
+def test_cache_delete(tmp_path) -> None:
+    cache = AbsaCache(tmp_path / "absa.sqlite")
+    cache.put("r1", TripleSet(triples=[]))
+    assert cache.contains("r1")
+    assert cache.delete("r1") is True
+    assert not cache.contains("r1")
+    assert cache.delete("r1") is False
+    cache.close()
+
+
+def test_cache_concurrent_puts(tmp_path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache = AbsaCache(tmp_path / "absa.sqlite")
+    triples = TripleSet(
+        triples=[AbsaTriple(aspect="fit", opinion="", sentiment="positive")]
+    )
+
+    def _put(i: int) -> None:
+        cache.put(f"r{i}", triples)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(_put, range(50)))
+    assert sum(1 for i in range(50) if cache.contains(f"r{i}")) == 50
+    cache.close()

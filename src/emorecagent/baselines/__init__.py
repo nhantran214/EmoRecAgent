@@ -1,6 +1,6 @@
-"""Comparison methods for the EmoRecAgent evaluation (U11).
+"""Comparison methods for the EmoRecAgent evaluation.
 
-All baselines share the `Recommender` interface so the U12 harness can run them
+All baselines share the `Recommender` interface so the eval harness can run them
 and the full system on the identical agentic subset.
 """
 

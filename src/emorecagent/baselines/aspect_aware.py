@@ -1,4 +1,4 @@
-"""Aspect-aware static baseline, EFM / TriRank-style (U11).
+"""Aspect-aware static baseline, EFM / TriRank-style.
 
 This is the most important baseline for our novelty claim. It is fed the *same*
 ABSA item-aspect sentiment Ê_i(a) and the *same* user aspect signals as the full

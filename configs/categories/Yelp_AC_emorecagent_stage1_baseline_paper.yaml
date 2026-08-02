@@ -1,0 +1,18 @@
+# Yelp_AC Stage-1-only baseline on the paper CE backbone.
+# Pair with Yelp_AC_emorecagent_align_paper.yaml for the Stage-2 no-regression gate.
+extends: Yelp_AC_tisasrec_paper.yaml
+
+experiment:
+  name: emorecagent_stage1_baseline_Yelp_AC_paper
+
+eval:
+  protocol: user_batch
+  aggregation: user_mean
+  k_values: [10, 20]
+  hr_avg_k: [1, 3, 5]
+
+tisasrec_align:
+  use_hash_encoder: true
+  stage1_only: true
+  preference_source: item_metadata
+  cross_user_mode: id_only

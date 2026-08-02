@@ -1,4 +1,4 @@
-"""Tests for U7 scoring: CF base, sentiment aggregation, and S(u,i) (R5)."""
+"""Tests for CF base, sentiment aggregation, and S(u,i) scoring."""
 
 from __future__ import annotations
 

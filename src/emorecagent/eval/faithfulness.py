@@ -1,4 +1,4 @@
-"""Non-circular explanation faithfulness (U12 / R13).
+"""Non-circular explanation faithfulness via score perturbation.
 
 We do NOT score faithfulness by lexical overlap (ROUGE-L is dropped — overlap is
 not faithfulness). Instead we use an ERASER-style perturbation test on the score
@@ -13,7 +13,7 @@ removing exactly those aspect contributions must actually hurt the item.
 - **unfaithful control**: citing non-driving aspects yields ~0 comprehensiveness;
   this proves the metric discriminates rather than rewarding any explanation.
 
-All functions operate on the U7 `ScoreBreakdown`, which carries per-aspect
+All functions operate on `ScoreBreakdown`, which carries per-aspect
 contribution magnitudes precisely so this test is possible.
 """
 

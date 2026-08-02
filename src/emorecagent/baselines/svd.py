@@ -1,6 +1,6 @@
-"""SVD / matrix-factorization baseline (U11).
+"""SVD / matrix-factorization baseline.
 
-Thin wrapper over the shared CFBase truncated-SVD backend (U7) so the standard
+Thin wrapper over the shared CFBase truncated-SVD backend so the standard
 CF baseline and the full system's S_base share one implementation.
 """
 

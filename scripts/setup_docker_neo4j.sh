@@ -6,10 +6,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+COMPOSE_CMD=()
+
 echo "[setup] EmoRecAgent Neo4j bootstrap"
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "[setup] ERROR: docker CLI not found. Install Docker Engine first."
+  echo "[setup] ERROR: docker CLI not found. Install: sudo apt-get install -y docker.io"
   exit 1
 fi
 
@@ -18,11 +20,58 @@ if ! systemctl is-active --quiet docker 2>/dev/null; then
   sudo systemctl enable --now docker
 fi
 
-if ! docker compose version >/dev/null 2>&1; then
-  echo "[setup] Installing docker-compose-plugin..."
+detect_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose)
+    return 0
+  fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+    return 0
+  fi
+  return 1
+}
+
+install_compose() {
+  echo "[setup] Docker Compose not found — installing..."
   sudo apt-get update -qq
-  sudo apt-get install -y docker-compose-plugin
+
+  # Ubuntu 24.04 (docker.io from distro): package name is docker-compose-v2.
+  if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+    echo "[setup] Installing docker-compose-v2 (Ubuntu package)..."
+    sudo apt-get install -y docker-compose-v2
+    return 0
+  fi
+
+  # Docker CE official repo uses docker-compose-plugin.
+  if apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+    echo "[setup] Installing docker-compose-plugin..."
+    sudo apt-get install -y docker-compose-plugin
+    return 0
+  fi
+
+  # Legacy v1 standalone.
+  if apt-cache show docker-compose >/dev/null 2>&1; then
+    echo "[setup] Installing docker-compose (v1 standalone)..."
+    sudo apt-get install -y docker-compose
+    return 0
+  fi
+
+  echo "[setup] ERROR: no compose package found in apt."
+  echo "         Try: sudo apt-get install -y docker-compose-v2"
+  exit 1
+}
+
+if ! detect_compose; then
+  install_compose
+  detect_compose || {
+    echo "[setup] ERROR: compose installed but still not on PATH."
+    echo "         Open a new shell and re-run this script."
+    exit 1
+  }
 fi
+
+echo "[setup] Using: ${COMPOSE_CMD[*]} ($(${COMPOSE_CMD[@]} version 2>/dev/null | head -1))"
 
 if ! id -nG "$USER" | grep -qw docker; then
   echo "[setup] Adding $USER to docker group (re-login or 'newgrp docker' afterward)..."
@@ -32,12 +81,12 @@ else
   ADDED_GROUP=0
 fi
 
-# Use sudo for compose when the current shell lacks docker-group membership.
+# Use sudo when the current shell lacks docker-group membership.
 compose() {
   if docker ps >/dev/null 2>&1; then
-    docker compose "$@"
+    "${COMPOSE_CMD[@]}" "$@"
   else
-    sudo docker compose "$@"
+    sudo "${COMPOSE_CMD[@]}" "$@"
   fi
 }
 
@@ -63,7 +112,7 @@ for i in $(seq 1 30); do
   fi
   sleep 2
   if [[ $i -eq 30 ]]; then
-    echo "[setup] WARN: HTTP not ready yet — check: docker compose logs neo4j"
+    echo "[setup] WARN: HTTP not ready yet — check: ${COMPOSE_CMD[*]} logs neo4j"
   fi
 done
 

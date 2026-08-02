@@ -1,4 +1,4 @@
-"""Canonical aspect vocabulary (U4)."""
+"""Canonical aspect vocabulary."""
 
 from __future__ import annotations
 

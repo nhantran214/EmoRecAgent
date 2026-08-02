@@ -1,15 +1,23 @@
 # Data (large; downloaded separately) — anchored to repo root so it does not
 # match the src/emorecagent/data/ or tests/data/ Python packages.
+/docs/
 /data/
 !/data/labeled/
 !/data/labeled/.gitkeep
+/ref_paper/
+/checkpoints/
+/baseline/
 
 # Caches / outputs
 *.cache
 .cache/
 absa_cache/
 results/
+results_old/
 runs/
+logs/
+/log/
+/log_tensorboard/
 *.parquet
 *.sqlite
 *.sqlite3
@@ -39,3 +47,4 @@ neo4j_logs/
 .DS_Store
 .idea/
 .vscode/
+.worktrees/

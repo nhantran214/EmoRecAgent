@@ -1,4 +1,4 @@
-"""Tests for U6 dynamic time-decayed aspect weights (R4)."""
+"""Tests for dynamic time-decayed aspect weights."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from emorecagent.agents.profiling_agent import DynamicUserProfilingAgent
 from emorecagent.scoring.dynamic_weights import (
     MS_PER_DAY,
     AspectSignal,
+    aspect_gammas,
     compute_weights,
     top_k_aspects,
 )
@@ -97,3 +98,14 @@ def test_profiling_agent_computes_and_persists():
     assert math.isclose(sum(weights.values()), 1.0, rel_tol=1e-9)
     assert src.persisted is not None and src.persisted[0] == "u1"
     assert agent.top_aspects("u1", t_now, 1)[0][0] == "comfort"
+
+
+def test_aspect_gammas_is_signed():
+    t_now = 10 * DAY
+    signals = [
+        AspectSignal("scent", polarity=0.8, timestamp_ms=t_now - DAY),
+        AspectSignal("comfort", polarity=-0.9, timestamp_ms=t_now - DAY),
+    ]
+    gammas = aspect_gammas(signals, t_now, lambda_per_day=0.01)
+    assert gammas["scent"] > 0
+    assert gammas["comfort"] < 0

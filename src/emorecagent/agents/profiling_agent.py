@@ -1,4 +1,4 @@
-"""Dynamic User Profiling Agent (U6).
+"""Dynamic User Profiling Agent.
 
 Reads the user's affective signals from a signal source (the Neo4j repository in
 production, any object implementing the Protocol in tests), computes the
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..scoring.dynamic_weights import AspectSignal, compute_weights, top_k_aspects
+from ..scoring.dynamic_weights import AspectSignal, aspect_gammas, compute_weights, top_k_aspects
 
 
 class UserSignalSource(Protocol):
@@ -50,3 +50,8 @@ class DynamicUserProfilingAgent:
     ) -> list[tuple[str, float]]:
         weights = self.profile(user_id, t_query_ms, top_k, persist=False)
         return top_k_aspects(weights, top_k)
+
+    def profile_gammas(self, user_id: str, t_query_ms: int) -> dict[str, float]:
+        """Signed aspect salience for HGT user-embedding injection at query time."""
+        signals = self._source.get_user_aspect_signals(user_id)
+        return aspect_gammas(signals, t_query_ms, self._lambda)

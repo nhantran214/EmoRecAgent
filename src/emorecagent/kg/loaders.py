@@ -1,4 +1,4 @@
-"""Batch loaders from split files and ABSA cache into Neo4j (U5)."""
+"""Batch loaders from split files and ABSA cache into Neo4j."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from ..absa.cache import AbsaCache
+from ..data.review_index import build_review_index_from_scope
 from ..data.types import Interaction
 from ..eval.runner import load_split_jsonl
 from ..scoring.sentiment_agg import ItemAspectTriple, aggregate_raw
@@ -76,6 +77,52 @@ def aggregate_item_sentiment_from_cache(
     return n_edges
 
 
+def load_train_kg(
+    repo: KGStore,
+    *,
+    train_path: str | Path,
+    raw_review_path: str | Path,
+    cache_path: str | Path,
+    helpful_cap: int,
+) -> dict[str, int]:
+    """Load train interactions + scoped ABSA cache into a KG store."""
+    train = load_split_jsonl(train_path)
+    n_interactions = load_interactions(repo, train)
+    cutoff = max((it.timestamp for it in train), default=0)
+    stats = {
+        "interactions": n_interactions,
+        "reviews_with_triples": 0,
+        "sentiment_edges": 0,
+        "review_index_size": 0,
+    }
+    cache_file = Path(cache_path)
+    if not cache_file.exists():
+        return stats
+
+    review_index = build_review_index_from_scope(train, raw_review_path)
+    stats["review_index_size"] = len(review_index)
+    cache = AbsaCache(cache_file)
+    stats["reviews_with_triples"] = load_absa_cache(repo, cache, review_index)
+
+    helpful_by_key = {
+        (it.user_id, it.item, it.timestamp): it.helpful_vote for it in train
+    }
+    item_reviews: dict[str, list[tuple[str, int]]] = {}
+    for rid, (uid, item, ts) in review_index.items():
+        item_reviews.setdefault(item, []).append(
+            (rid, helpful_by_key.get((uid, item, ts), 0))
+        )
+    stats["sentiment_edges"] = aggregate_item_sentiment_from_cache(
+        repo,
+        cache,
+        item_reviews,
+        helpful_cap=helpful_cap,
+        cutoff_ts=cutoff,
+    )
+    cache.close()
+    return stats
+
+
 def load_split_dir(repo: KGRepository, split_dir: str | Path) -> dict[str, int]:
     """Load train+valid+test interactions from a processed split directory."""
     split_dir = Path(split_dir)
@@ -91,21 +138,18 @@ def build_review_index_from_jsonl(
     path: str | Path, max_rows: int | None = None
 ) -> dict[str, tuple[str, str, int]]:
     """Map review_id -> (user_id, parent_asin, timestamp) from raw reviews."""
+    from ..data.loader import stream_reviews
+
     out: dict[str, tuple[str, str, int]] = {}
     n = 0
-    with Path(path).open(encoding="utf-8") as fh:
-        for line in fh:
-            if max_rows is not None and n >= max_rows:
-                break
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            rid = str(row.get("review_id") or "")
-            uid = str(row.get("user_id") or "")
-            item = str(row.get("parent_asin") or row.get("asin") or "")
-            ts = int(row.get("timestamp", 0))
-            if rid and uid and item:
-                out[rid] = (uid, item, ts)
-                n += 1
+    for row in stream_reviews(path):
+        if max_rows is not None and n >= max_rows:
+            break
+        rid = str(row.get("review_id") or "")
+        uid = str(row.get("user_id") or "")
+        item = str(row.get("parent_asin") or row.get("asin") or "")
+        ts = int(row.get("timestamp", 0))
+        if rid and uid and item:
+            out[rid] = (uid, item, ts)
+            n += 1
     return out

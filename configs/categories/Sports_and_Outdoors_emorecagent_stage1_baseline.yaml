@@ -1,0 +1,15 @@
+# Protocol B Stage-1-only baseline for Sports and Outdoors (same method as Beauty).
+extends: Sports_and_Outdoors.yaml
+
+experiment:
+  name: emorecagent_stage1_baseline_Sports_and_Outdoors
+
+eval:
+  protocol: user_batch
+  aggregation: user_mean
+  k_values: [10, 20]
+  hr_avg_k: [1, 3, 5]
+
+tisasrec_align:
+  use_hash_encoder: true
+  stage1_only: true

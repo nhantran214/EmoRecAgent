@@ -1,4 +1,4 @@
-"""U12 runner tests: split loading, evaluation, infra-method guard, reproducibility."""
+"""Runner tests: split loading, evaluation, infra-method guard, reproducibility."""
 
 from __future__ import annotations
 
@@ -37,16 +37,78 @@ def test_evaluate_produces_means_and_per_user_vectors() -> None:
     res = evaluate(
         PopularityRecommender(), _train(), _test(), k_values=[1, 5], method="pop"
     )
+    assert res.n_test_rows == 1
     assert res.n_test_users == 1
+    assert res.protocol == "full_catalog"
     assert "ndcg@5" in res.means and "hr@1" in res.means
+    assert "avg_hr@1,3,5" in res.means
+    assert len(res.user_ids) == 1
     assert all(len(v) == 1 for v in res.per_user.values())
 
 
-def test_infra_methods_raise_until_pipeline_exists() -> None:
-    with pytest.raises(NotImplementedError):
+def test_agentic_methods_require_train_interactions() -> None:
+    with pytest.raises(ValueError, match="train_interactions"):
         build_recommender("emorecagent", {}, seed=0)
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ValueError, match="train_interactions"):
         build_recommender("aspect_aware", {}, seed=0)
+    with pytest.raises(ValueError, match="train_interactions"):
+        build_recommender("emorecagent_align", {}, seed=0)
+
+
+def test_emorecagent_runs_on_fixture_train() -> None:
+    rec = build_recommender(
+        "emorecagent",
+        {
+            "train_interactions": _train(),
+            "factors": 4,
+            "kg_backend": "memory",
+            "use_llm_cot": False,
+            "use_reflection": False,
+        },
+        seed=0,
+    )
+    res = evaluate(
+        rec,
+        _train(),
+        _test(),
+        k_values=[5],
+        method="emorecagent",
+        seed=0,
+        method_variant="langgraph",
+    )
+    assert res.n_test_users == 1
+    assert "ndcg@5" in res.means
+    assert res.method_variant == "langgraph"
+
+
+def test_emorecagent_fast_runs_on_fixture_train() -> None:
+    rec = build_recommender(
+        "emorecagent_fast",
+        {"train_interactions": _train(), "factors": 4},
+        seed=0,
+    )
+    res = evaluate(
+        rec, _train(), _test(), k_values=[5], method="emorecagent_fast", seed=0
+    )
+    assert res.n_test_users == 1
+
+
+def test_verified_only_filters_test_rows() -> None:
+    test_rows = [
+        Interaction("u0", "i_held", 5.0, 3 * DAY, verified_purchase=True),
+        Interaction("u0", "i_skip", 5.0, 4 * DAY, verified_purchase=False),
+    ]
+    res = evaluate(
+        PopularityRecommender(),
+        _train(),
+        test_rows,
+        [5],
+        method="pop",
+        verified_only=True,
+    )
+    assert res.n_test_rows == 1
+    assert res.verified_only is True
+    assert res.n_verified_rows == 1
 
 
 def test_base_cf_aliases_svd() -> None:
@@ -78,12 +140,59 @@ def test_paired_compare_returns_significance() -> None:
     assert res.p_value < 0.05
 
 
+def test_n_negatives_protocol() -> None:
+    res_full = evaluate(
+        PopularityRecommender(), _train(), _test(), [5], method="pop", n_negatives=None
+    )
+    res_sampled = evaluate(
+        PopularityRecommender(), _train(), _test(), [5], method="pop",
+        n_negatives=2, seed=0,
+    )
+    assert res_full.protocol == "full_catalog"
+    assert res_sampled.protocol == "sampled_negatives"
+
+
+def test_cumulative_history_excludes_prior_test_item() -> None:
+    train = [
+        Interaction("u0", "i_a", 5.0, 1 * DAY),
+        Interaction("u0", "i_b", 5.0, 2 * DAY),
+        Interaction("u1", "i_pop", 5.0, 1 * DAY),
+    ]
+    test_rows = [
+        Interaction("u0", "i_held1", 5.0, 3 * DAY),
+        Interaction("u0", "i_held2", 5.0, 4 * DAY),
+    ]
+    default = evaluate(
+        PopularityRecommender(), train, test_rows, [5],
+        method="pop", cumulative_history=False,
+    )
+    cumulative = evaluate(
+        PopularityRecommender(), train, test_rows, [5],
+        method="pop", cumulative_history=True,
+    )
+    assert default.n_test_rows == 2
+    assert cumulative.n_test_rows == 2
+
+
+def test_user_mean_with_multiple_rows() -> None:
+    test_rows = [
+        Interaction("u0", "i_held", 5.0, 3 * DAY),
+        Interaction("u0", "i_extra", 5.0, 4 * DAY),
+    ]
+    res = evaluate(PopularityRecommender(), _train(), test_rows, [5], method="pop")
+    assert res.n_test_rows == 2
+    assert res.n_test_users == 1
+    assert res.means["hr@5"] == res.means_per_user["hr@5"]
+
+
 def test_write_and_load_round_trip(tmp_path) -> None:
     res = evaluate(PopularityRecommender(), _train(), _test(), [5], method="pop")
     out = write_results(tmp_path / "r.json", res)
     payload = json.loads(out.read_text())
     assert payload["method"] == "pop"
     assert payload["n_test_users"] == 1
+    assert payload["n_test_rows"] == 1
+    assert "means_per_user" in payload
 
     # load_split_jsonl round-trips the on-disk split format
     split_file = tmp_path / "train.jsonl"

@@ -1,0 +1,32 @@
+# Category overlay: Amazon Toys and Games (same hyperparameters as default).
+# All writable artifacts are under Toys paths — never touches Beauty/Sports caches.
+# Usage: --config configs/categories/Toys_and_Games.yaml
+extends: ../default.yaml
+
+experiment:
+  name: Toys_and_Games
+
+data:
+  category: Toys_and_Games
+  review_path: data/amazon-reviews-2023/raw/review_categories/Toys_and_Games.jsonl
+  meta_path: data/amazon-reviews-2023/raw/meta_categories/meta_Toys_and_Games.jsonl
+  out_dir: data/processed/Toys_and_Games
+
+absa:
+  targets_path: data/processed/Toys_and_Games/absa_targets.jsonl
+  cache_path: data/processed/Toys_and_Games/absa_cache.sqlite
+  gold_path: data/labeled/Toys_and_Games/absa_gold.jsonl
+  summary_path: results/Toys_and_Games/absa_summary.json
+  preview_html_path: results/Toys_and_Games/absa_preview.html
+
+tisasrec_align:
+  stage1_checkpoint_path: data/processed/Toys_and_Games/tisasrec_align/stage1_checkpoint.pt
+  e_i_matrix_path: data/processed/Toys_and_Games/tisasrec_align/e_i_matrix.pt
+  alignment_checkpoint_path: data/processed/Toys_and_Games/tisasrec_align/alignment_mlp.pt
+  tu_cache_path: data/processed/Toys_and_Games/tisasrec_align/tu_cache.jsonl
+  cross_user_lookup_path: data/processed/Toys_and_Games/tisasrec_align/cross_user_lookup.json
+
+hettisasrec:
+  aspect_vocab_path: data/processed/Toys_and_Games/hettisasrec/aspect_vocab.json
+  aspect_graph_path: data/processed/Toys_and_Games/hettisasrec/aspect_graph.pt
+  checkpoint_path: data/processed/Toys_and_Games/hettisasrec/checkpoint.pt

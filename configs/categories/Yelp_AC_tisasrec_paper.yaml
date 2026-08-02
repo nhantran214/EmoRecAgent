@@ -1,0 +1,95 @@
+# Yelp no-review — AC-TSR / RecBole TiSASRec as Stage-1 backbone.
+#
+# Stage-1 is the vendored RecBole TiSASRec (baseline/RecBole-TiSASRec), not the
+# in-repo ERA trainer. Train/export via scripts/train_yelp_ac_recbole_stage1.py.
+# Amazon / Yelp-review / Yelp_AC BCE tracks keep stage1_backend: era (default).
+#
+# Paper target (AC-TSR Table 1, TiSASRec on Yelp):
+#   Recall@10=0.0618  Recall@20=0.0909  NDCG@10=0.0387  NDCG@20=0.0460
+#
+# Data protocol matches AC-TSR config/yelp.yaml:
+#   closed date [1546264800, 1577714400], 5-core, leave-last-out, maxlen 50,
+#   dedup_user_item: false (keep multi-visit review_id rows → ~DIF-SR cohort).
+extends: Yelp_AC.yaml
+
+experiment:
+  name: Yelp_AC_tisasrec_paper
+
+data:
+  # Explicit for this paper experiment (also set on Yelp_AC.yaml base).
+  dedup_user_item: false
+
+eval:
+  protocol: user_batch
+  aggregation: user_mean
+  k_values: [10, 20]
+  hr_avg_k: [1, 3, 5]
+  verified_only: false
+
+tisasrec_align:
+  # RecBole TiSASRec Stage-1 (Yelp_AC paper track only).
+  stage1_backend: recbole
+  recbole_bundle_path: data/processed/Yelp_AC/tisasrec_paper/recbole_stage1_bundle.pt
+  recbole_vendor_root: baseline/RecBole-TiSASRec/vendor
+
+  # Isolated artifact roots (tu/cross-user still under tisasrec_paper/).
+  # ERA stage1_checkpoint / e_i paths unused when stage1_backend=recbole.
+  stage1_checkpoint_path: data/processed/Yelp_AC/tisasrec_paper/stage1_checkpoint.pt
+  e_i_matrix_path: data/processed/Yelp_AC/tisasrec_paper/e_i_matrix.pt
+  alignment_checkpoint_path: data/processed/Yelp_AC/tisasrec_paper/alignment_mlp.pt
+  tu_cache_path: data/processed/Yelp_AC/tisasrec_paper/tu_cache.jsonl
+  cross_user_lookup_path: data/processed/Yelp_AC/tisasrec_paper/cross_user_lookup.json
+
+  # AC-TSR config_t.yaml shared training settings.
+  #
+  # steps_per_epoch: this repo packs ONE row per user (Kang style), so the
+  # default steps/epoch = n_users/batch = 30449/256 ≈ 118, against RecBole's
+  # ~998 (it augments one row per prefix). Pinned to 1000 to match that update
+  # budget. Note this was not the accuracy bottleneck: with 1000 the run still
+  # peaks at valid recall@10=0.0494 (epoch 19) and then overfits.
+  stage1_epochs: 300
+  batch_size: 256
+  steps_per_epoch: 1000
+  lr: 0.0001
+  maxlen: 50
+  optimizer: adam
+  weight_decay: 0.0
+  l2_emb: 0.0
+  lr_scheduler_enabled: false
+  early_stop_patience: 10
+  early_stop_metric: valid_link_recall@10
+
+  # RecBole TiSASRec defaults (paper best {layers,heads,hidden} is grid-only).
+  # Start here; retune num_blocks∈{2,3}, num_heads∈{2,4}, hidden_units∈{64,128}.
+  num_blocks: 2
+  num_heads: 2
+  hidden_units: 64
+  # RecBole TransformerEncoder default; Kang TiSASRec uses hidden→hidden (None).
+  inner_size: 256
+  dropout_rate: 0.5
+  time_span: 256
+
+  # Relative time in DAYS instead of Li et al.'s per-user min-gap divisor.
+  # On Yelp the min-gap rule breaks down: 65.7% of users have a sub-hour gap
+  # somewhere (median 453s), so norm_ts reaches p90=131378 and nearly every
+  # interval saturates time_span=256 (38.8% of matrix cells on average). It
+  # also makes the unit per-user, so the shared interval embedding conflates
+  # "35 minutes" with "5 months". Days keep a 1-year window inside time_span.
+  time_unit_seconds: 86400
+
+  # Full-catalog CE over every non-pad target (equivalent to RecBole
+  # loss_type: CE on its prefix-augmented rows).
+  stage1_loss: ce
+  num_train_negatives: 1
+
+  # RecBole LOO: history = train+valid when scoring the held-out test item.
+  test_history: train_valid
+  valid_mask_train_seen: true
+  valid_eval_all: true
+  valid_eval_batch_size: 256
+  pool_size: 50
+
+  # Stage-1-only paper reproduction (no Stage-2 / ABSA).
+  stage1_only: true
+  stage2_mode: rerank
+  use_hash_encoder: true

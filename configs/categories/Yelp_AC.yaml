@@ -1,0 +1,62 @@
+# Yelp no-review track (AC-TSR / RecBole settings). Isolated from CATEGORY=Yelp.
+# Source: data/yelp-open-dataset/raw/yelp_AC/yelp/yelp/yelp.inter
+# Date filter = AC-TSR config/yelp.yaml closed 2019 interval (unix seconds).
+#
+# NOTE: This base + *_emorecagent_*.yaml overlays inherit Amazon-style Stage-1
+# defaults (BCE) for the EmoRecAgent Stage-2 track.
+# For paper TiSASRec reproduction (CE loss), use instead:
+#   configs/categories/Yelp_AC_tisasrec_paper.yaml
+extends: ../default.yaml
+
+experiment:
+  name: Yelp_AC
+
+data:
+  category: Yelp_AC
+  # Unused for interaction load when inter_path is set; kept for path isolation.
+  review_path: data/yelp-open-dataset/raw/yelp_AC/yelp/yelp
+  meta_path: data/yelp-open-dataset/raw/yelp_AC/yelp/yelp
+  inter_path: data/yelp-open-dataset/raw/yelp_AC/yelp/yelp
+  out_dir: data/processed/Yelp_AC
+  k_core: 5
+  max_users: null
+  max_items: null
+  min_history: 0
+  split_method: leave_last_out
+  min_timestamp_s: 1546264800
+  max_timestamp_s: 1577714400
+  # RecBole/AC-TSR keep multi-visit reviews (review_id); do not collapse (user,item).
+  dedup_user_item: false
+
+absa:
+  enabled: false
+  targets_path: data/processed/Yelp_AC/absa_targets.jsonl
+  cache_path: data/processed/Yelp_AC/absa_cache.sqlite
+  gold_path: data/labeled/Yelp_AC/absa_gold.jsonl
+  summary_path: results/Yelp_AC/absa_summary.json
+  preview_html_path: results/Yelp_AC/absa_preview.html
+
+tisasrec_align:
+  stage1_checkpoint_path: data/processed/Yelp_AC/tisasrec_align/stage1_checkpoint.pt
+  e_i_matrix_path: data/processed/Yelp_AC/tisasrec_align/e_i_matrix.pt
+  alignment_checkpoint_path: data/processed/Yelp_AC/tisasrec_align/alignment_mlp.pt
+  tu_cache_path: data/processed/Yelp_AC/tisasrec_align/tu_cache.jsonl
+  cross_user_lookup_path: data/processed/Yelp_AC/tisasrec_align/cross_user_lookup.json
+  # Paper shared training settings (AC-TSR §5.1.4 / config_t.yaml).
+  stage1_epochs: 200
+  batch_size: 256
+  lr: 0.0001
+  maxlen: 50
+  lr_scheduler_enabled: false
+  early_stop_patience: 10
+  # RecBole TiSASRec defaults (paper best arch unknown / grid-only).
+  num_blocks: 2
+  num_heads: 2
+  hidden_units: 64
+  # LOO test history includes valid (RecBole-faithful).
+  test_history: train_valid
+
+hettisasrec:
+  aspect_vocab_path: data/processed/Yelp_AC/hettisasrec/aspect_vocab.json
+  aspect_graph_path: data/processed/Yelp_AC/hettisasrec/aspect_graph.pt
+  checkpoint_path: data/processed/Yelp_AC/hettisasrec/checkpoint.pt

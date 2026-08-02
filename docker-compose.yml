@@ -19,3 +19,61 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  tgi:
+    image: ghcr.io/huggingface/text-generation-inference:3.2.1
+    container_name: emorecagent-tgi
+    profiles: ["tgi"]
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      MODEL_ID: ${TGI_MODEL_ID:-Qwen/Qwen2.5-7B-Instruct}
+      MAX_CONCURRENT_REQUESTS: ${TGI_MAX_CONCURRENT_REQUESTS:-128}
+      MAX_BATCH_PREFILL_TOKENS: ${TGI_MAX_BATCH_PREFILL_TOKENS:-8192}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+  tgi-small:
+    image: ghcr.io/huggingface/text-generation-inference:3.2.1
+    container_name: emorecagent-tgi-small
+    profiles: ["tgi-small"]
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      # ABSA validate/repair (3B). Prefer latency under JSON grammar decode:
+      # moderate concurrency + smaller batches beat huge concurrent queues.
+      MODEL_ID: ${TGI_MODEL_SMALL_ID:-Qwen/Qwen2.5-3B-Instruct}
+      MAX_CONCURRENT_REQUESTS: ${TGI_SMALL_MAX_CONCURRENT_REQUESTS:-48}
+      MAX_BATCH_PREFILL_TOKENS: ${TGI_SMALL_MAX_BATCH_PREFILL_TOKENS:-16384}
+      MAX_BATCH_TOTAL_TOKENS: ${TGI_SMALL_MAX_BATCH_TOTAL_TOKENS:-32768}
+      MAX_WAITING_TOKENS: ${TGI_SMALL_MAX_WAITING_TOKENS:-8}
+      CUDA_MEMORY_FRACTION: ${TGI_SMALL_CUDA_MEMORY_FRACTION:-0.95}
+      # Cap context so uncapped clients cannot request 32k-token generations.
+      MAX_TOTAL_TOKENS: ${TGI_SMALL_MAX_TOTAL_TOKENS:-8192}
+      MAX_INPUT_LENGTH: ${TGI_SMALL_MAX_INPUT_LENGTH:-6144}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s

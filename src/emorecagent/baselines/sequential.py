@@ -1,4 +1,4 @@
-"""Order-aware sequential baseline (U11).
+"""Order-aware sequential baseline.
 
 Defends the *temporal* claim against a model that already exploits interaction
 order. This is a first-order Markov item-transition recommender: it learns, from

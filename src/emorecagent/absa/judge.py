@@ -1,4 +1,4 @@
-"""Stage 2: LLM-as-judge validation (U4)."""
+"""Stage 2: LLM-as-judge validation."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class AbsaJudge:
             review_text=review_text,
             candidates_json=cand_json,
         )
-        validated = self._client.invoke_structured(prompt, TripleSet)
+        validated = self._client.invoke_structured(prompt, TripleSet, max_tokens=1024)
         kept = [
             t for t in validated.triples if t.confidence >= self.min_confidence
         ]

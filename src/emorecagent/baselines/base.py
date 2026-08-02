@@ -1,8 +1,8 @@
-"""Shared recommender interface (U11).
+"""Shared recommender interface.
 
 Every baseline and the full EmoRecAgent system expose the same two operations:
 `fit` on train interactions, and `score` a candidate set for a user. Ranking and
-top-K selection are provided once here so the U12 harness treats all methods
+top-K selection are provided once here so the eval harness treats all methods
 identically. Scores need not be normalized; only their order within a candidate
 set matters for ranking metrics.
 """

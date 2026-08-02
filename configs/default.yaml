@@ -4,14 +4,18 @@
 experiment:
   name: default
   seed: 42
+  # null = evaluate all test rows; set e.g. 100 for dev loops
+  max_test_rows: null
+  use_llm_cot: true
 
 data:
   category: Beauty_and_Personal_Care
   review_path: data/amazon-reviews-2023/raw/review_categories/Beauty_and_Personal_Care.jsonl
   meta_path: data/amazon-reviews-2023/raw/meta_categories/meta_Beauty_and_Personal_Care.jsonl
   out_dir: data/processed/Beauty_and_Personal_Care
-  # k-core filtering
-  k_core: 5
+  # Iterative k-core: keep only users with >= k reviews AND items with >= k reviews.
+  # 10-core = denser graph, fewer ABSA targets vs 5-core.
+  k_core: 10
   # Agentic subset caps (LLM-bound path). null = no cap.
   max_users: 5000
   max_items: 20000
@@ -19,6 +23,10 @@ data:
   # (the dynamic-weight effect cannot exist for near-cold users).
   min_history: 5
   min_distinct_aspects: 2
+  # Chronological split (never random): earliest → train, mid → valid, latest → test
+  split_train_ratio: 0.8
+  split_valid_ratio: 0.1
+  split_test_ratio: 0.1
 
 scoring:
   # S(u,i) = alpha * S_base + (1 - alpha) * sum_a w_u(a,t) * E_hat_i(a)
@@ -35,9 +43,29 @@ cf:
   factors: 64
 
 absa:
+  # Scoped to processed train split (written by make data / export_absa_targets).
+  targets_path: data/processed/Beauty_and_Personal_Care/absa_targets.jsonl
   cache_path: data/processed/Beauty_and_Personal_Care/absa_cache.sqlite
   gold_path: data/labeled/absa_gold.jsonl
+  summary_path: results/absa_summary.json
+  preview_html_path: results/absa_preview.html
+  # llm_only | hybrid | classical (classical = PyABSA only, no LLM)
+  backend: hybrid
+  pipeline_version: hybrid-v1
+  classical_checkpoint: multilingual
+  classical_checkpoint_path: null
+  # auto | cpu | cuda — classical-only CLI defaults to cuda
+  classical_device: auto
+  classical_batch_size: 32
+  classical_min_confidence: 0.85
+  repair_on_gap: true
+  quality_gate_max_f1_drop: 0.02
   min_confidence: 0.5
+  gold_n_samples: 750
+  gold_train_only: true
+  gold_stratify_length: true
+  min_aspect_support: 5
+  min_sentiment_support: 10
 
 agents:
   max_reflection_iters: 2
@@ -45,20 +73,103 @@ agents:
   min_aspect_edges: 1
   top_k_aspects: 5
   default_budget: null   # user budget; null = no hard budget gate
+  llm_rank_prefix: 20
+  aspect_recall_tau: 0.65
+  aspect_recall_max: 15
+  ranking_num_predict: 4096
 
 eval:
   k_values: [5, 10, 20]
+  hr_avg_k: [1, 3, 5]
+  cumulative_history: false
   n_bootstrap: 1000
   n_seeds: 3
+  # Protocol A (EmoRecAgent ablations): per-row + verified ground truth.
+  verified_only: false
+  protocol: per_row
+  aggregation: row_mean
+  # Thread pool for independent test rows. With TGI, start at 4–8 and watch GPU memory.
+  parallel_workers: 1
+  # Group 8-16 per-row sampled rankings into one batched LLM reasoning call.
+  llm_batch: false
+  batch_size: 12
+  batch_token_budget: 28000
+  # Also run 1 pos + 100 neg sampled eval (stored in results JSON under "sampled").
+  n_negatives: 100
+  sampled_k_values: [1, 3, 5]
 
 llm:
-  model: qwen2.5:7b
+  # Agents / experiment (overridden by LLM_MODEL in .env)
+  model: Qwen/Qwen2.5-7B-Instruct
+  # ABSA validate/repair only (overridden by LLM_MODEL_SMALL; falls back to model)
+  model_small: Qwen/Qwen2.5-3B-Instruct
   temperature: 0.0
-  request_timeout_s: 120
+  # Grammar JSON under high concurrency often needs >120s without max_tokens cap.
+  request_timeout_s: 180
   max_retries: 3
+
+# TGI / OpenAI-compatible inference server (vLLM, SGLang also work via base_url).
+tgi:
+  base_url: http://localhost:8080
+  base_url_small: null
+  api_key: null
 
 # Factorial ablation toggles. The default config is the full system.
 ablation:
   reflection: true
   dynamic_weights: true
   aspect_term: true
+
+# TiSASRec + agent vector-space alignment (paper method: make train-emorecagent / experiment-emorecagent).
+tisasrec_align:
+  stage1_checkpoint_path: data/processed/Beauty_and_Personal_Care/tisasrec_align/stage1_checkpoint.pt
+  e_i_matrix_path: data/processed/Beauty_and_Personal_Care/tisasrec_align/e_i_matrix.pt
+  alignment_checkpoint_path: data/processed/Beauty_and_Personal_Care/tisasrec_align/alignment_mlp.pt
+  tu_cache_path: data/processed/Beauty_and_Personal_Care/tisasrec_align/tu_cache.jsonl
+  hidden_units: 128
+  maxlen: 50
+  num_blocks: 2
+  num_heads: 2
+  dropout_rate: 0.3
+  l2_emb: 0.0001
+  time_span: 256
+  fusion_alpha: 0.7
+  text_encoder_dim: 768
+  tu_mode: cache
+  use_hash_encoder: false
+  stage1_only: false
+  stage2_mode: fusion
+  rerank_pool_k: 100
+  llm_pool_cap: 40
+  cross_user_boost: 0.05
+  cross_user_lookup_path: data/processed/Beauty_and_Personal_Care/tisasrec_align/cross_user_lookup.json
+  guardrail_top_n: 5
+  guardrail_max_drop_rank: 10
+  infonce_tau_grid: [0.05, 0.07, 0.1]
+  alignment_activation: elu
+  stage1_epochs: 1000
+  stage2_epochs: 20
+  lr: 0.001
+  alignment_lr: 0.001
+  batch_size: 512
+  alignment_batch_size: 64
+  steps_per_epoch: auto   # baseline: max(n_users // batch_size, 1)
+  early_stop_patience: 30
+  early_stop_metric: valid_link_hr@10
+  valid_mask_train_seen: true
+  require_valid: true
+  valid_eval_all: true
+  device: cuda
+  valid_eval_max_pairs: 2048
+  valid_eval_batch_size: 512
+  pool_size: 50
+  lr_scheduler_enabled: true
+  lr_scheduler_patience: 5
+  lr_scheduler_factor: 0.5
+  min_lr: 0.00001
+  optimizer: adam
+  weight_decay: 0.0001
+  stage1_loss: bce
+  num_train_negatives: 1
+  lambda_decay: 0.01
+  top_k_aspects: 5

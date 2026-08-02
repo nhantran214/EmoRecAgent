@@ -1,0 +1,36 @@
+# Yelp_AC Stage-2 (full EmoRecAgent) on the RecBole TiSASRec Stage-1 backbone.
+#
+# Extends the paper config (`stage1_backend: recbole`) so Stage-2 rerank scores
+# with the exported RecBole bundle under tisasrec_paper/ — NOT the Amazon-style
+# BCE ERA checkpoint used by configs/categories/Yelp_AC_emorecagent_align.yaml.
+#
+# No-review adaptations are unchanged from the Yelp_AC EmoRecAgent track:
+#   - preference_source: item_metadata (T_u from RecBole .item name/categories)
+#   - cross_user_mode: id_only (co-visit lookup, no review text)
+#   - absa disabled (inherited)
+#
+# Stage-1 baseline for the no-regression gate is a stage1_only run of THIS config
+# (same user_batch / user_mean aggregation), not AC-TSR Table 1.
+extends: Yelp_AC_tisasrec_paper.yaml
+
+experiment:
+  name: emorecagent_align_Yelp_AC_paper
+
+eval:
+  protocol: user_batch
+  aggregation: user_mean
+  k_values: [10, 20]
+  hr_avg_k: [1, 3, 5]
+
+tisasrec_align:
+  # Run full Stage-2 rerank on the inherited CE checkpoint + architecture.
+  stage1_only: false
+  stage2_mode: rerank
+  use_hash_encoder: true
+  rerank_pool_k: 100
+  llm_pool_cap: 40
+  guardrail_mode: reorder_head
+  reorder_head_n: 10
+  # Metadata-derived T_u / ID-only co-visit (no ABSA).
+  preference_source: item_metadata
+  cross_user_mode: id_only
