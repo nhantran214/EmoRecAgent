@@ -1,0 +1,7 @@
+extends: ../default.yaml
+
+experiment:
+  name: hgt_retriever
+
+cf:
+  backend: hgt

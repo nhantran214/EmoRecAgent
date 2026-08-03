@@ -111,6 +111,62 @@ def test_verified_only_filters_test_rows() -> None:
     assert res.n_verified_rows == 1
 
 
+def test_emorecagent_runs_on_fixture_train() -> None:
+    rec = build_recommender(
+        "emorecagent",
+        {
+            "train_interactions": _train(),
+            "factors": 4,
+            "kg_backend": "memory",
+            "use_llm_cot": False,
+            "use_reflection": False,
+        },
+        seed=0,
+    )
+    res = evaluate(
+        rec,
+        _train(),
+        _test(),
+        k_values=[5],
+        method="emorecagent",
+        seed=0,
+        method_variant="langgraph",
+    )
+    assert res.n_test_users == 1
+    assert "ndcg@5" in res.means
+    assert res.method_variant == "langgraph"
+
+
+def test_emorecagent_fast_runs_on_fixture_train() -> None:
+    rec = build_recommender(
+        "emorecagent_fast",
+        {"train_interactions": _train(), "factors": 4},
+        seed=0,
+    )
+    res = evaluate(
+        rec, _train(), _test(), k_values=[5], method="emorecagent_fast", seed=0
+    )
+    assert res.n_test_users == 1
+
+
+def test_verified_only_filters_test_rows() -> None:
+    test_rows = [
+        Interaction("u0", "i_held", 5.0, 3 * DAY, verified_purchase=True),
+        Interaction("u0", "i_skip", 5.0, 4 * DAY, verified_purchase=False),
+    ]
+    res = evaluate(
+        PopularityRecommender(),
+        _train(),
+        test_rows,
+        [5],
+        method="pop",
+        verified_only=True,
+    )
+    assert res.n_test_rows == 1
+    assert res.verified_only is True
+    assert res.n_verified_rows == 1
+
+
 def test_base_cf_aliases_svd() -> None:
     rec = build_recommender("base_cf", {"factors": 4}, seed=0)
     assert rec.name == "svd"
