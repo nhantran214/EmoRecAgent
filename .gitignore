@@ -1,6 +1,5 @@
 # Data (large; downloaded separately) — anchored to repo root so it does not
 # match the src/emorecagent/data/ or tests/data/ Python packages.
-/docs/
 /data/
 !/data/labeled/
 !/data/labeled/.gitkeep
@@ -8,16 +7,22 @@
 /checkpoints/
 /baseline/
 
+# Local docs / experiment artifacts (not for GitHub)
+/docs/
+docs/
+/log_tensorboard/
+log_tensorboard/
+/results_old/
+results_old/
+
 # Caches / outputs
 *.cache
 .cache/
 absa_cache/
 results/
-results_old/
 runs/
 logs/
 /log/
-/log_tensorboard/
 *.parquet
 *.sqlite
 *.sqlite3
