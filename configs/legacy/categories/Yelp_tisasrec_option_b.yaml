@@ -1,0 +1,51 @@
+# Yelp (reviews) Stage-1 Option B — RecBole TiSASRec (CE) as ERA Stage-1 backend.
+#
+# Train/export: scripts/train_yelp_recbole_stage1_option_b.py
+# Option A (ERA in-repo) remains configs/categories/Yelp_emorecagent_*.yaml.
+extends: Yelp_era_base.yaml
+
+experiment:
+  name: Yelp_tisasrec_option_b
+
+eval:
+  protocol: user_batch
+  aggregation: user_mean
+  k_values: [10, 20]
+  hr_avg_k: [1, 3, 5]
+  verified_only: false
+
+tisasrec_align:
+  stage1_backend: recbole
+  recbole_bundle_path: data/processed/Yelp/tisasrec_option_b/recbole_stage1_bundle.pt
+  recbole_vendor_root: baseline/RecBole-TiSASRec/vendor
+
+  # Isolated artifact roots (do not collide with Option A tisasrec_align/).
+  stage1_checkpoint_path: data/processed/Yelp/tisasrec_option_b/stage1_checkpoint.pt
+  e_i_matrix_path: data/processed/Yelp/tisasrec_option_b/e_i_matrix.pt
+  alignment_checkpoint_path: data/processed/Yelp/tisasrec_option_b/alignment_mlp.pt
+  tu_cache_path: data/processed/Yelp/tisasrec_option_b/tu_cache.jsonl
+  cross_user_lookup_path: data/processed/Yelp/tisasrec_option_b/cross_user_lookup.json
+
+  # Match RecBole CE tower (paper_tisasrec_yelp_reviews.yaml): hidden_size=64.
+  num_blocks: 2
+  num_heads: 2
+  hidden_units: 64
+  inner_size: 256
+  dropout_rate: 0.5
+  time_span: 256
+  maxlen: 50
+  lr: 0.0001
+  batch_size: 2048
+  weight_decay: 0.0
+  stage1_loss: ce
+  fusion_alpha: 0.7
+
+  # Chrono Protocol B (review track): train-only history at test time.
+  test_history: train
+  stage1_only: true
+  stage2_mode: rerank
+  # Paper §III.F sentence encoder; hash only for ablations.
+  use_hash_encoder: false
+  # Review-track Stage-2 signals (ABSA / review text), unlike Yelp_AC.
+  preference_source: absa
+  cross_user_mode: review_text

@@ -1,0 +1,34 @@
+# Yelp (reviews) Stage-2 Option B — paper §III.F / Fig. 4 Guarded Reranking Agent.
+#
+# Stage-1: RecBole TiSASRec CE bundle (tisasrec_option_b/).
+# Stage-2: latent alignment of T_u → fused pool scores → LLM listwise reorder
+#          → context-dependent position-stability guardrail (Eqs. 19–21).
+#
+# Option A (Yelp_emorecagent_align.yaml) keeps reorder_head — do not change it.
+extends: Yelp_tisasrec_option_b.yaml
+
+experiment:
+  name: emorecagent_align_Yelp_option_b
+
+tisasrec_align:
+  stage1_only: false
+  stage2_mode: rerank
+  # Paper uses all-mpnet-base-v2; set true only for hash-encoder ablations.
+  use_hash_encoder: false
+  rerank_pool_k: 100
+  llm_pool_cap: 40
+  fusion_alpha: 0.7
+  cross_user_boost: 0.05
+  # Fig. 4 / Algorithm 1 — NOT Option A's reorder_head.
+  guardrail_mode: context_dependent
+  guardrail_n0: 5
+  guardrail_m0: 10
+  guardrail_gamma_n: 3.0
+  guardrail_gamma_m: 5.0
+  guardrail_n_min: 3
+  guardrail_n_max: 8
+  guardrail_m_min: 8
+  guardrail_m_max: 15
+  guardrail_omega: 0.7
+  preference_source: absa
+  cross_user_mode: review_text

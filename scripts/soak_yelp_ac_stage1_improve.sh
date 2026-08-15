@@ -7,7 +7,7 @@ MAIN=${EMOREC_MAIN:-/home/ai/ethan/EmoRecAgent}
 LOG_DIR=$MAIN/logs/Yelp_AC
 mkdir -p "$LOG_DIR"
 
-if pgrep -f "train_tisasrec_stage1.py.*Yelp_AC_tisasrec_paper" >/dev/null 2>&1 \
+if pgrep -f "train_tisasrec_stage1.py.*Yelp_AC" >/dev/null 2>&1 \
   || pgrep -f "run_yelp_ac_stage1_(parity|improve)_queue|parity_arch_queue" >/dev/null 2>&1; then
   echo "A Stage-1 train/queue is already running. Refusing duplicate."
   pgrep -af "train_tisasrec_stage1|parity_|improve_queue" || true

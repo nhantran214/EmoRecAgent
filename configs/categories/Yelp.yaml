@@ -1,19 +1,23 @@
-# Category overlay: Yelp Open Dataset (same hyperparameters / method as default).
-# Points at the unpacked official dump under raw/yelp_dataset — build_dataset
-# normalizes native Yelp review rows (business_id/stars/date) on the fly.
+# Yelp (reviews) — RecBole TiSASRec CE + φ LTR + listwise LLM.
 # Usage: --config configs/categories/Yelp.yaml
 extends: ../default.yaml
 
 experiment:
-  name: Yelp
+  name: emorecagent_Yelp
 
 data:
   category: Yelp
   review_path: data/yelp-open-dataset/raw/yelp_dataset
   meta_path: data/yelp-open-dataset/raw/yelp_dataset
   out_dir: data/processed/Yelp
-  # Denser graph than Amazon defaults (10-core).
   k_core: 20
+
+eval:
+  protocol: user_batch
+  aggregation: user_mean
+  k_values: [10, 20, 50, 100]
+  hr_avg_k: [1, 3, 5]
+  verified_only: false
 
 absa:
   targets_path: data/processed/Yelp/absa_targets.jsonl
@@ -23,11 +27,88 @@ absa:
   preview_html_path: results/Yelp/absa_preview.html
 
 tisasrec_align:
-  stage1_checkpoint_path: data/processed/Yelp/tisasrec_align/stage1_checkpoint.pt
-  e_i_matrix_path: data/processed/Yelp/tisasrec_align/e_i_matrix.pt
-  alignment_checkpoint_path: data/processed/Yelp/tisasrec_align/alignment_mlp.pt
-  tu_cache_path: data/processed/Yelp/tisasrec_align/tu_cache.jsonl
-  cross_user_lookup_path: data/processed/Yelp/tisasrec_align/cross_user_lookup.json
+  stage1_backend: recbole
+  recbole_bundle_path: data/processed/Yelp/tisasrec_option_b/recbole_stage1_bundle.pt
+  recbole_vendor_root: baseline/RecBole-TiSASRec/vendor
+  recbole_train_config: baseline/RecBole-TiSASRec/configs/paper_tisasrec_yelp_reviews.yaml
+
+  stage1_checkpoint_path: data/processed/Yelp/tisasrec_option_b/stage1_checkpoint.pt
+  e_i_matrix_path: data/processed/Yelp/tisasrec_option_b/e_i_matrix.pt
+  alignment_checkpoint_path: data/processed/Yelp/tisasrec_option_b/alignment_mlp.pt
+  tu_cache_path: data/processed/Yelp/tisasrec_option_b/tu_cache.jsonl
+  cross_user_lookup_path: data/processed/Yelp/tisasrec_option_b/cross_user_lookup.json
+
+  # Stage-1: keep hparams matching the already-trained RecBole CE bundle.
+  num_blocks: 2
+  num_heads: 2
+  hidden_units: 64
+  inner_size: 256
+  dropout_rate: 0.5
+  time_span: 256
+  maxlen: 50
+  lr: 0.0001
+  batch_size: 256
+  weight_decay: 0.0
+  stage1_loss: ce
+  test_history: train
+
+  # Stage-2: φ reranks π¹[:300]; LLM listwise-ranks a 100-item window mixed by
+  # weights (φ primary, T_u/ABSA + co secondary). Parse fail → φ, not π¹.
+  stage1_only: false
+  stage2_mode: rerank
+  stage2_score: ltr_llm
+  item_potential_ltr_path: data/processed/Yelp/tisasrec_option_b/item_potential_ltr.npz
+  use_hash_encoder: false
+  rerank_pool_k: 300
+  llm_pool_cap: 100
+  guardrail_mode: context_dependent
+  llm_rerank_mode: listwise
+  llm_overlap_inject: 0
+  llm_w_phi: 1.0
+  llm_w_tu: 0.2
+  llm_w_co: 0.1
+  llm_w_llm: 0.25
+  llm_promote_k: 20
+  llm_protect_n: 0
+  llm_card_max_name: 100
+  llm_card_max_cats: 5
+  llm_card_review_snippets: true
+  llm_card_max_review_chars: 100
+  llm_card_review_candidates: 5
+  llm_narrow_cap: 0
+  llm_reason_then_pick: false
+  llm_reason_depth: deep
+  llm_hybrid_overlap_delta: 0
+  llm_hybrid_overlap_delta_out_of_band: 1
+  llm_hybrid_rank_lo: 11
+  llm_hybrid_rank_hi: 300
+  llm_hybrid_first_enabled: true
+  llm_hybrid_min_overlap: 2
+  llm_scorecard_focus_cap: 50
+  llm_pick_mode: argmax_llm_override
+  llm_constraint_override: true
+  llm_hybrid_gate_enabled: false
+  llm_lexical_first_enabled: false
+  llm_lexical_first_rank_lo: 11
+  llm_lexical_first_rank_hi: 20
+  llm_lexical_first_overlap_delta: 1
+  llm_blend_beta: 0.0
+  fusion_alpha: 0.7
+  cross_user_boost: 0.05
+  llm_gate_enabled: true
+  llm_min_c_u: 0.45
+  llm_max_stage1_margin: 0.85
+  guardrail_n0: 3
+  guardrail_m0: 15
+  guardrail_gamma_n: 2.0
+  guardrail_gamma_m: 8.0
+  guardrail_n_min: 2
+  guardrail_n_max: 5
+  guardrail_m_min: 12
+  guardrail_m_max: 30
+  guardrail_omega: 0.7
+  preference_source: absa
+  cross_user_mode: review_text
 
 hettisasrec:
   aspect_vocab_path: data/processed/Yelp/hettisasrec/aspect_vocab.json

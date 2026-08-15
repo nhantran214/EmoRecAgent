@@ -1,0 +1,15 @@
+extends: ../default.yaml
+
+experiment:
+  name: paper_baseline
+
+eval:
+  # Protocol B — LightGCN / Amazon Beauty paper alignment.
+  verified_only: false
+  k_values: [10, 20]
+  hr_avg_k: [1, 3, 5]
+  cumulative_history: false
+  protocol: user_batch
+  aggregation: user_mean
+  n_negatives: 100
+  sampled_k_values: [1, 3, 5]

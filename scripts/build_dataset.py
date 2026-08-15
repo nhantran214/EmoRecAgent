@@ -6,7 +6,7 @@ Usage:
   PYTHONPATH=src python scripts/build_dataset.py --config configs/default.yaml --max-scan 200000
   PYTHONPATH=src python scripts/build_dataset.py --log-dir logs
   # RecBole / AC-TSR Yelp (no user-item dedup):
-  PYTHONPATH=src python scripts/build_dataset.py --config configs/categories/Yelp_AC_tisasrec_paper.yaml
+  PYTHONPATH=src python scripts/build_dataset.py --config configs/categories/Yelp_AC.yaml
 """
 
 from __future__ import annotations

@@ -131,3 +131,127 @@ def test_guardrail_fallback_to_stage1(monkeypatch) -> None:
     ranked = rec.rank("u1", candidates, query_ts_ms=1000)
     assert ranked == stage1
     assert rec.n_fallback == 1
+
+
+def test_reorder_head_preserves_membership_beyond_head() -> None:
+    tu_cache = {
+        "u1|1000": TuCacheRow(
+            user_id="u1",
+            query_ts_ms=1000,
+            T_u="likes i1",
+            has_reviews=True,
+        )
+    }
+    llm = MagicMock()
+    llm.invoke_ranking_json.return_value = ["i3", "i2", "i1"]
+    train = [Interaction(user_id="u1", item="i1", rating=5.0, timestamp=500)]
+    rec = RerankAlignRecommender(
+        _stage1_rec(),
+        tu_cache,
+        {},
+        review_index={("u1", "i1", 500): "nice"},
+        train=train,
+        rerank_pool_k=3,
+        llm_pool_cap=3,
+        guardrail_mode="reorder_head",
+        reorder_head_n=2,
+        llm=llm,
+        skip_llm=False,
+    )
+    candidates = ["i1", "i2", "i3"]
+    stage1 = rec._stage1.rank("u1", candidates, query_ts_ms=1000)
+    ranked = rec.rank("u1", candidates, query_ts_ms=1000)
+    assert set(ranked[:2]) == set(stage1[:2])
+    assert ranked[2:] == stage1[2:]
+    assert rec.n_llm_calls == 1
+
+
+def test_llm_gate_skips_on_high_margin() -> None:
+    tu_cache = {
+        "u1|1000": TuCacheRow(
+            user_id="u1",
+            query_ts_ms=1000,
+            T_u="likes i1",
+            has_reviews=True,
+        )
+    }
+    llm = MagicMock()
+    llm.invoke_ranking_json.return_value = ["i3", "i2", "i1"]
+    train = [Interaction(user_id="u1", item="i1", rating=5.0, timestamp=500)]
+    rec = RerankAlignRecommender(
+        _stage1_rec(),
+        tu_cache,
+        {},
+        review_index={("u1", "i1", 500): "nice"},
+        train=train,
+        rerank_pool_k=3,
+        llm_pool_cap=3,
+        guardrail_mode="reorder_head",
+        reorder_head_n=2,
+        llm_gate_enabled=True,
+        llm_min_c_u=0.0,
+        llm_max_stage1_margin=0.0,  # any positive margin → skip
+        llm=llm,
+        skip_llm=False,
+    )
+    candidates = ["i1", "i2", "i3"]
+    stage1 = rec._stage1.rank("u1", candidates, query_ts_ms=1000)
+    ranked = rec.rank("u1", candidates, query_ts_ms=1000)
+    assert ranked == stage1
+    assert rec.n_llm_calls == 0
+    assert rec.n_llm_skipped_gate == 1
+    llm.invoke_ranking_json.assert_not_called()
+
+
+def test_ltr_pool_rerank_merges_stage1_tail(monkeypatch) -> None:
+    import numpy as np
+
+    rec = _rerank_rec()
+    rec._stage2_score = "ltr"
+    rec._ltr_w = np.zeros(21)
+    rec._ltr_mu = np.zeros(21)
+    rec._ltr_sd = np.ones(21)
+    rec._rerank_pool_k = 3
+    rec.prepare_user_query("u1", 1000)
+
+    rec._stage1.rank = MagicMock(return_value=["a", "b", "c", "d"])
+    rec._stage1.score = MagicMock(return_value={"a": 3.0, "b": 2.0, "c": 1.0, "d": 0.0})
+    monkeypatch.setattr(
+        "emorecagent.tisasrec_align.rerank_recommender.score_pool_potential",
+        lambda *args, **kwargs: MagicMock(),
+    )
+    monkeypatch.setattr(
+        "emorecagent.tisasrec_align.rerank_recommender.score_pool_ltr",
+        lambda pool, scored, **kwargs: {"a": 0.0, "b": 1.0, "c": 2.0},
+    )
+
+    ranked = rec.rank("u1", ["a", "b", "c", "d"], query_ts_ms=1000)
+    assert ranked == ["c", "b", "a", "d"]
+    assert rec.n_ltr_rerank == 1
+    assert rec.n_stage1_only == 0
+
+
+def test_ltr_without_weights_returns_stage1() -> None:
+    rec = _rerank_rec()
+    rec._stage2_score = "ltr"
+    rec._ltr_w = rec._ltr_mu = rec._ltr_sd = None
+    rec.prepare_user_query("u1", 1000)
+    candidates = ["i1", "i2", "i3"]
+    stage1 = rec._stage1.rank("u1", candidates, query_ts_ms=1000)
+    ranked = rec.rank("u1", candidates, query_ts_ms=1000)
+    assert ranked == stage1
+    assert rec.n_stage1_only == 1
+
+
+def test_fit_history_includes_valid_prefix_items() -> None:
+    rec = _rerank_rec()
+    rec.fit(
+        [
+            Interaction(user_id="u1", item="i1", rating=5.0, timestamp=500),
+            Interaction(user_id="u1", item="i2", rating=5.0, timestamp=700),
+        ]
+    )
+    rec._stage2_score = "ltr"
+    rec._rebuild_ltr_stats(list(rec._train_by_user["u1"]))
+    assert rec._history_items("u1", 1000) == ["i1", "i2"]
+    assert rec._item_pop["i2"] == 1.0

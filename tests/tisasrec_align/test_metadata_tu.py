@@ -6,7 +6,9 @@ from emorecagent.data.types import Interaction
 from emorecagent.tisasrec_align.item_metadata import (
     ItemMeta,
     format_item_card,
+    load_amazon_meta_jsonl,
     load_item_metadata,
+    load_stage2_item_metadata,
 )
 from emorecagent.tisasrec_align.preference_text import (
     generate_preference_text_from_metadata,
@@ -63,12 +65,43 @@ def test_metadata_tu_empty_prefix() -> None:
     assert result.T_u == ""
 
 
+def test_load_amazon_meta_jsonl_keep_ids(tmp_path) -> None:
+    path = tmp_path / "meta_Beauty.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"parent_asin":"B001","title":"Serum A","categories":["Beauty","Skin"]}',
+                '{"parent_asin":"B002","title":"Serum B","main_category":"Beauty"}',
+                '{"asin":"B003","title":"Oil C","categories":[["Beauty","Hair"]]}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    meta = load_amazon_meta_jsonl(path, keep_ids={"B001", "B003"})
+    assert set(meta) == {"B001", "B003"}
+    assert meta["B001"].name == "Serum A"
+    assert "Skin" in meta["B001"].categories
+    assert "Hair" in meta["B003"].categories
+    # Auto loader picks JSONL by suffix.
+    auto = load_stage2_item_metadata(path, keep_ids={"B002"})
+    assert auto["B002"].name == "Serum B"
+
+
 def test_candidate_cards_include_metadata() -> None:
     meta = {
         "A": ItemMeta(item_id="A", name="Alpha Cafe", categories="Food, Coffee, Nightlife"),
     }
-    cards = build_candidate_cards(["A", "B"], {"A": 0.9, "B": 0.1}, meta)
+    cards = build_candidate_cards(
+        ["A", "B"],
+        {"A": 0.9, "B": 0.1},
+        meta,
+        stage1_ranks={"A": 1, "B": 2},
+    )
     assert "name=Alpha Cafe" in cards
     assert "cats=Food, Coffee, Nightlife" in cards or "cats=Food, Coffee" in cards
     assert "B | S=0.1000" in cards
+    # Titles must not drop Stage-1 rank (regression that hurt Beauty Stage-2).
+    assert "π¹_rank=1" in cards
+    assert "π¹_rank=2" in cards
     assert format_item_card("A", 0.5, meta["A"]).startswith("A | S=0.5000")

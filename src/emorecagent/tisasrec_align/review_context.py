@@ -52,3 +52,40 @@ def prefix_reviews_for_user(
                 )
             )
     return rows
+
+
+def item_review_snippets_from_index(
+    review_index: dict[tuple[str, str, int], str],
+    *,
+    keep_ids: set[str] | None = None,
+    allowed_reviews: set[tuple[str, str, int]] | None = None,
+    max_chars: int = 100,
+    max_per_item: int = 1,
+) -> dict[str, list[str]]:
+    """Collapse ``(user,item,ts)→text`` into per-item review candidates for cards.
+
+    ``allowed_reviews`` restricts to Protocol-B history keys (train or
+    train+valid). Without it, test-split reviews of the gold item can land on
+    that item's card (label leak). Keeps up to ``max_per_item`` non-empty
+    reviews per item (stable by iteration order of ``review_index``).
+    """
+    out: dict[str, list[str]] = {}
+    cap = max(1, int(max_per_item))
+    # Keep more text when storing multiple candidates for T_u matching.
+    width = max(16, int(max_chars) * (2 if cap > 1 else 1))
+    width = min(width, 280)
+    for key, text in review_index.items():
+        uid, item, ts = key
+        if keep_ids is not None and item not in keep_ids:
+            continue
+        if allowed_reviews is not None and (uid, item, int(ts)) not in allowed_reviews:
+            continue
+        raw = str(text or "").strip()
+        if not raw:
+            continue
+        bucket = out.setdefault(item, [])
+        if len(bucket) >= cap:
+            continue
+        snippet = raw if len(raw) <= width else raw[: width - 1] + "…"
+        bucket.append(snippet)
+    return out

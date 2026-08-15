@@ -146,6 +146,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--category", default=None)
     parser.add_argument("--processed-dir", default=None)
     parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument(
+        "--train-batch-size",
+        type=int,
+        default=None,
+        help="Override RecBole train_batch_size",
+    )
     parser.add_argument("--out", default=None, help="Output JSON path")
     parser.add_argument("--log-dir", default=None)
     parser.add_argument("--log-file", default=None)
@@ -193,7 +199,8 @@ def main() -> int:
 
     with tee_stdout_stderr(log_path):
         t0 = time.monotonic()
-        logger.info("=== RecBole TiSASRec (CE) × %s ===", category)
+        loss_label = model_cfg.get("loss_type") or "CE"
+        logger.info("=== RecBole TiSASRec (%s) × %s ===", loss_label, category)
         logger.info("processed_dir: %s", data_dir)
 
         dataset_dir = DATASET_ROOT / dataset_name
@@ -206,9 +213,22 @@ def main() -> int:
         CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 
         # Runtime paths must be absolute so RecBole finds the exported dataset.
+        # Prefer per-track checkpoint dirs (Yelp Option B vs Yelp_AC) when set.
+        ckpt_dir = CHECKPOINT_DIR
+        raw_ckpt = (
+            model_cfg.get("checkpoint_dir")
+            or data_cfg.get("checkpoint_dir")
+            or None
+        )
+        if raw_ckpt:
+            ckpt_dir = Path(raw_ckpt)
+            if not ckpt_dir.is_absolute():
+                ckpt_dir = BASELINE_ROOT / ckpt_dir
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+
         config_dict = {
             "data_path": str(DATASET_ROOT),
-            "checkpoint_dir": str(CHECKPOINT_DIR),
+            "checkpoint_dir": str(ckpt_dir),
             "seed": exp_cfg.get("experiment", {}).get("seed", 42),
         }
         epochs = args.epochs if args.epochs is not None else model_cfg.get("epochs")
@@ -221,12 +241,34 @@ def main() -> int:
             "inner_size",
             "train_batch_size",
             "learning_rate",
+            "loss_type",
+            "hidden_dropout_prob",
+            "attn_dropout_prob",
+            "time_span",
+            "stopping_step",
+            "weight_decay",
+            "neg_sampling",
         ):
             if key in model_cfg and model_cfg[key] is not None:
                 config_dict[key] = model_cfg[key]
+        # CLI overrides YAML (must run after the model_cfg loop).
+        if args.train_batch_size is not None:
+            config_dict["train_batch_size"] = int(args.train_batch_size)
 
+        # Dataset overlay: Yelp_AC default; Option B Yelp reviews sets
+        # data.recbole_base_config: configs/yelp_reviews.yaml
+        base_name = data_cfg.get("recbole_base_config") or "configs/yelp_ac.yaml"
+        base_cfg = _resolve_project_path(base_name)
+        if not base_cfg.is_file():
+            # Also resolve relative to baseline root (configs/...).
+            alt = BASELINE_ROOT / base_name
+            if alt.is_file():
+                base_cfg = alt
+            else:
+                alt2 = BASELINE_ROOT / Path(base_name).name
+                base_cfg = alt2 if alt2.is_file() else base_cfg
         config_files = [
-            BASELINE_ROOT / "configs" / "yelp_ac.yaml",
+            base_cfg,
             BASELINE_ROOT / "configs" / "config_t.yaml",
             BASELINE_ROOT / "configs" / "TiSASRec.yaml",
         ]

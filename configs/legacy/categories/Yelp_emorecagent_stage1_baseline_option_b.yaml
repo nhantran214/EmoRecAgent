@@ -1,0 +1,10 @@
+# Yelp (reviews) Stage-1-only baseline on Option B RecBole CE backbone.
+# Pair with Yelp_emorecagent_align_option_b.yaml for the Stage-2 no-regression gate.
+extends: Yelp_tisasrec_option_b.yaml
+
+experiment:
+  name: emorecagent_stage1_baseline_Yelp_option_b
+
+tisasrec_align:
+  use_hash_encoder: true
+  stage1_only: true

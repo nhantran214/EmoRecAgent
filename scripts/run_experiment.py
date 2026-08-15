@@ -22,6 +22,42 @@ from emorecagent.utils.run_log import configure_run_logging
 from emorecagent.utils.seeding import set_global_seed
 
 
+def apply_emorecagent_align_cli_overrides(cfg, args: argparse.Namespace):
+    """Apply ``--stage1-only`` / ``--stage2-ltr`` / ``--use-hash-encoder``.
+
+    Stage-1-only and LTR Stage-2 use the same category YAML as full LLM
+    Stage-2; CLI overrides avoid a separate baseline config file.
+    """
+    if args.method != "emorecagent_align":
+        return cfg
+    updates: dict = {}
+    if getattr(args, "stage1_only", False):
+        updates["stage1_only"] = True
+    if getattr(args, "stage2_ltr_llm", False):
+        updates["stage2_score"] = "ltr_llm"
+    elif getattr(args, "stage2_ltr", False):
+        updates["stage2_score"] = "ltr"
+    if getattr(args, "use_hash_encoder", False):
+        updates["use_hash_encoder"] = True
+    if not updates:
+        return cfg
+    ta = cfg.tisasrec_align.model_copy(update=updates)
+    return cfg.model_copy(update={"tisasrec_align": ta})
+
+
+def eval_fit_interactions(train, history_train, *, method: str):
+    """Train list ``evaluate()`` uses for ``fit()`` and seen-item masking.
+
+    ``run_experiment`` may build the recommender on ``history_train``
+    (train+valid when ``test_history=train_valid``). Passing the original
+    ``train.jsonl`` into ``evaluate`` clears RecBole prefixes and leaves
+    valid purchases in the catalog.
+    """
+    if method == "emorecagent_align":
+        return history_train
+    return train
+
+
 def _eval_pass_protocol(args: argparse.Namespace) -> str:
     if args.no_sampled_eval and args.eval_pass == "both":
         return "full_catalog"
@@ -124,10 +160,11 @@ def _log_config(
         ta = cfg.tisasrec_align
         logger.info(
             "tisasrec_align: fusion_alpha=%s tu_mode=%s stage1_only=%s "
-            "use_hash_encoder=%s stage1=%s alignment=%s tu_cache=%s",
+            "stage2_score=%s use_hash_encoder=%s stage1=%s alignment=%s tu_cache=%s",
             ta.fusion_alpha,
             ta.tu_mode,
             ta.stage1_only,
+            ta.stage2_score,
             ta.use_hash_encoder,
             ta.stage1_checkpoint_path,
             ta.alignment_checkpoint_path,
@@ -244,6 +281,38 @@ def main() -> None:
         default=None,
         help="approx prompt token budget per batch (overrides eval.batch_token_budget)",
     )
+    parser.add_argument(
+        "--stage1-only",
+        action="store_true",
+        help=(
+            "emorecagent_align: override tisasrec_align.stage1_only=true "
+            "(Stage-1 baseline; no Stage-2 fusion/LLM)"
+        ),
+    )
+    parser.add_argument(
+        "--stage2-ltr",
+        action="store_true",
+        help=(
+            "emorecagent_align: override tisasrec_align.stage2_score=ltr "
+            "(rerank π¹[:K] by listwise φ; no LLM)"
+        ),
+    )
+    parser.add_argument(
+        "--stage2-ltr-llm",
+        action="store_true",
+        help=(
+            "emorecagent_align: override tisasrec_align.stage2_score=ltr_llm "
+            "(φ rerank + LLM scorecard on φ/ABSA/co-purchase)"
+        ),
+    )
+    parser.add_argument(
+        "--use-hash-encoder",
+        action="store_true",
+        help=(
+            "emorecagent_align: override tisasrec_align.use_hash_encoder=true "
+            "(HashEncoder ablation)"
+        ),
+    )
     args = parser.parse_args()
 
     logger, log_path = configure_run_logging(
@@ -255,6 +324,7 @@ def main() -> None:
     t0 = time.monotonic()
 
     cfg = load_config(args.config)
+    cfg = apply_emorecagent_align_cli_overrides(cfg, args)
     set_global_seed(cfg.experiment.seed)
     split_dir = Path(args.split)
     cumulative = args.cumulative_history or cfg.eval.cumulative_history
@@ -383,10 +453,17 @@ def main() -> None:
         batch_size=batch_size,
         batch_token_budget=batch_token_budget,
     )
+    eval_train = eval_fit_interactions(train, history_train, method=args.method)
+    if eval_train is not train:
+        logger.info(
+            "evaluate fit/seen uses history_train (%s rows, was train=%s)",
+            f"{len(eval_train):,}",
+            f"{len(train):,}",
+        )
     if eval_mode == "both":
         result = evaluate(
             recommender,
-            train,
+            eval_train,
             test,
             k_values=cfg.eval.k_values,
             method=args.method,
@@ -410,7 +487,7 @@ def main() -> None:
     else:
         result = evaluate(
             recommender,
-            train,
+            eval_train,
             test,
             k_values=cfg.eval.k_values,
             method=args.method,
@@ -439,6 +516,9 @@ def main() -> None:
             "tisasrec_align": {
                 "fusion_alpha": ta.fusion_alpha,
                 "stage1_only": ta.stage1_only,
+                "stage2_score": ta.stage2_score,
+                "item_potential_ltr_path": ta.item_potential_ltr_path,
+                "test_history": ta.test_history,
                 "stage2_mode": ta.stage2_mode,
                 "use_hash_encoder": ta.use_hash_encoder,
                 "stage1_checkpoint": ta.stage1_checkpoint_path,
@@ -451,11 +531,80 @@ def main() -> None:
         }
         rec = recommender
         if hasattr(rec, "n_fallback"):
+            n_pass = int(getattr(rec, "n_guardrail_pass", 0))
+            c_sum = float(getattr(rec, "_c_u_sum", 0.0))
+            c_n = int(getattr(rec, "_c_u_count", 0))
+            n_gate = int(getattr(rec, "n_llm_skipped_gate", 0))
             result.metadata["tisasrec_align"].update(
                 {
+                    "guardrail_mode": ta.guardrail_mode,
+                    "reorder_head_n": ta.reorder_head_n,
+                    "llm_rerank_mode": ta.llm_rerank_mode,
+                    "llm_promote_k": ta.llm_promote_k,
+                    "llm_protect_n": ta.llm_protect_n,
+                    "llm_card_review_snippets": ta.llm_card_review_snippets,
+                    "llm_card_review_candidates": ta.llm_card_review_candidates,
+                    "llm_narrow_cap": ta.llm_narrow_cap,
+                    "llm_reason_then_pick": ta.llm_reason_then_pick,
+                    "llm_reason_depth": ta.llm_reason_depth,
+                    "llm_hybrid_gate_enabled": ta.llm_hybrid_gate_enabled,
+                    "llm_hybrid_overlap_delta": ta.llm_hybrid_overlap_delta,
+                    "llm_hybrid_overlap_delta_out_of_band": (
+                        ta.llm_hybrid_overlap_delta_out_of_band
+                    ),
+                    "llm_hybrid_rank_lo": ta.llm_hybrid_rank_lo,
+                    "llm_hybrid_rank_hi": ta.llm_hybrid_rank_hi,
+                    "llm_hybrid_first_enabled": ta.llm_hybrid_first_enabled,
+                    "llm_hybrid_min_overlap": ta.llm_hybrid_min_overlap,
+                    "llm_scorecard_focus_cap": ta.llm_scorecard_focus_cap,
+                    "llm_overlap_inject": ta.llm_overlap_inject,
+                    "llm_w_phi": ta.llm_w_phi,
+                    "llm_w_tu": ta.llm_w_tu,
+                    "llm_w_co": ta.llm_w_co,
+                    "llm_w_llm": ta.llm_w_llm,
+                    "llm_pick_mode": ta.llm_pick_mode,
+                    "llm_constraint_override": ta.llm_constraint_override,
+                    "llm_lexical_first_enabled": ta.llm_lexical_first_enabled,
+                    "llm_lexical_first_rank_lo": ta.llm_lexical_first_rank_lo,
+                    "llm_lexical_first_rank_hi": ta.llm_lexical_first_rank_hi,
+                    "llm_lexical_first_overlap_delta": (
+                        ta.llm_lexical_first_overlap_delta
+                    ),
+                    "llm_blend_beta": ta.llm_blend_beta,
+                    "llm_gate_enabled": ta.llm_gate_enabled,
                     "n_fallback": rec.n_fallback,
+                    "n_guardrail_pass": n_pass,
                     "n_llm_calls": rec.n_llm_calls,
+                    "n_llm_skipped_gate": n_gate,
                     "n_stage1_only": rec.n_stage1_only,
+                    "n_ltr_rerank": int(getattr(rec, "n_ltr_rerank", 0)),
+                    "n_stage2_swaps": int(getattr(rec, "n_stage2_swaps", 0)),
+                    "n_stage2_empty_picks": int(
+                        getattr(rec, "n_stage2_empty_picks", 0)
+                    ),
+                    "n_stage2_hybrid_blocked": int(
+                        getattr(rec, "n_stage2_hybrid_blocked", 0)
+                    ),
+                    "n_stage2_lexical_first": int(
+                        getattr(rec, "n_stage2_lexical_first", 0)
+                    ),
+                    "n_stage2_hybrid_first_filtered": int(
+                        getattr(rec, "n_stage2_hybrid_first_filtered", 0)
+                    ),
+                    "n_stage2_lexical_argmax": int(
+                        getattr(rec, "n_stage2_lexical_argmax", 0)
+                    ),
+                    "n_stage2_llm_override": int(
+                        getattr(rec, "n_stage2_llm_override", 0)
+                    ),
+                    "guardrail_reject_rate": (
+                        rec.n_fallback / max(rec.n_fallback + n_pass, 1)
+                    ),
+                    "mean_c_u": (c_sum / c_n) if c_n else None,
+                    "n_item_meta": len(getattr(rec, "_item_meta", {}) or {}),
+                    "n_review_snippets": len(
+                        getattr(rec, "_review_snippets", {}) or {}
+                    ),
                 }
             )
 

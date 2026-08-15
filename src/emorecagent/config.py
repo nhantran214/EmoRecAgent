@@ -141,6 +141,14 @@ class TiSASRecAlignCfg(_Strict):
     tu_mode: Literal["cache", "live"] = "cache"
     use_hash_encoder: bool = False
     stage1_only: bool = False
+    # Stage-2 scorer when ``stage2_mode=rerank``.
+    # ``ltr`` = rerank π¹[:rerank_pool_k] by listwise φ (no LLM).
+    # ``ltr_llm`` = φ rerank + listwise LLM on a weighted window (default method).
+    # ``llm`` = LLM-only pool score (legacy).
+    stage2_score: Literal["llm", "ltr", "ltr_llm"] = "llm"
+    item_potential_ltr_path: str = (
+        "data/processed/Beauty_and_Personal_Care/tisasrec_option_b/item_potential_ltr.npz"
+    )
     stage2_mode: Literal["fusion", "rerank"] = "fusion"
     rerank_pool_k: int = 100
     llm_pool_cap: int = 40
@@ -153,21 +161,117 @@ class TiSASRecAlignCfg(_Strict):
     # Stage-2 merge policy. "position": legacy full-revert guardrail (any Stage-1
     # top-N item dropping past max_drop_rank reverts the whole ranking).
     # "reorder_head": constrain the LLM to permute only Stage-1's top
-    # `reorder_head_n` items (membership at k >= reorder_head_n preserved by
-    # construction, so hr@k/recall@k never regress vs Stage-1). "off": keep the
-    # merged ranking unconditionally.
-    guardrail_mode: Literal["position", "reorder_head", "off"] = "position"
+    # `reorder_head_n` items (Option A default). "off": keep the merged ranking
+    # unconditionally. "context_dependent": paper §III.F / Fig. 4 Eqs. (19)–(21)
+    # with (N_u, M_u) from alignment confidence (Option B).
+    guardrail_mode: Literal[
+        "position", "reorder_head", "off", "context_dependent"
+    ] = "position"
     reorder_head_n: int = 10
+    # Paper §IV.D defaults for context_dependent guardrail (Eqs. 19–20).
+    guardrail_n0: int = 5
+    guardrail_m0: int = 10
+    guardrail_gamma_n: float = 3.0
+    guardrail_gamma_m: float = 5.0
+    guardrail_n_min: int = 3
+    guardrail_n_max: int = 8
+    guardrail_m_min: int = 8
+    guardrail_m_max: int = 15
+    guardrail_omega: float = 0.7
+    # Confidence gate (C): skip LLM when T_u poorly aligned or Stage-1 margin high.
+    # Off by default (Option A / legacy); Option B Amazon+Yelp YAMLs turn it on.
+    llm_gate_enabled: bool = False
+    llm_min_c_u: float = 0.45
+    # Skip LLM when sigmoid(Stage-1 top − rank-n0) exceeds this (Stage-1 already sure).
+    llm_max_stage1_margin: float = 0.85
+    # Stage-2 LLM strategy.
+    # ``listwise`` = full pool permute (paper Fig. 4 default).
+    # ``top_k_promote`` = pick best-k then fill (may demote Stage-1 head).
+    # ``promote_preserve`` = insert after frozen π¹[:protect_n] (can shift 6–10).
+    # ``promote_swap`` = swap into tail of top-(protect_n+k); hr@10-safer.
+    llm_rerank_mode: Literal[
+        "listwise", "top_k_promote", "promote_preserve", "promote_swap"
+    ] = "listwise"
+    llm_promote_k: int = 10
+    # Frozen Stage-1 prefix for promote_preserve / promote_swap.
+    # promote_swap + protect_n=9 + promote_k=1 → only slot 10 is replaceable.
+    # promote_preserve under context_dependent may use max(llm_protect_n, N_u).
+    llm_protect_n: int = 5
+    # Title length on candidate / anchor cards (Amazon titles are long).
+    llm_card_max_name: int = 80
+    llm_card_max_cats: int = 5
+    # B4: append a short review snippet on candidate cards when available.
+    llm_card_review_snippets: bool = False
+    llm_card_max_review_chars: int = 100
+    # Store up to N reviews/item; at rank time pick the one best matching T_u.
+    llm_card_review_candidates: int = 1
+    # 3+4+1: narrow outside-head candidates by T_u lexical overlap before LLM.
+    # ``<= 0`` keeps the full outside-head set (no shortlist cut).
+    llm_narrow_cap: int = 12
+    # Two-call reason-then-pick (extract prefs → contrastive swap). promote_swap only.
+    llm_reason_then_pick: bool = False
+    # ``deep`` = rich extract + scorecard pick (fit+2 gate); ``shallow`` = V1 ablation.
+    llm_reason_depth: Literal["shallow", "deep"] = "deep"
+    # After LLM/scorecard: require lexical overlap(cand) ≥ overlap(disp) + delta.
+    llm_hybrid_gate_enabled: bool = True
+    llm_hybrid_overlap_delta: int = 1
+    # Stricter margin when candidate π¹ rank is outside the near-miss band.
+    llm_hybrid_overlap_delta_out_of_band: int = 2
+    llm_hybrid_rank_lo: int = 11
+    llm_hybrid_rank_hi: int = 40
+    # Hybrid-first: after extract, drop shortlist cands that fail the lexical
+    # margin *before* scorecard (LLM only ranks lexical-viable cands). Cards get
+    # ``ov=cand/disp`` annotations. Prefer over lexical-first when studying LLM.
+    llm_hybrid_first_enabled: bool = False
+    # Absolute floor on cand T_u-token hits (in addition to beating displacee).
+    llm_hybrid_min_overlap: int = 0
+    # Keep only top-N overlap/near-miss cands for the scorecard LLM.
+    # ``0`` = no focus cut (LLM sees the full eligible / π¹ pool outside head).
+    llm_scorecard_focus_cap: int = 0
+    # Listwise window (``llm_rerank_mode=listwise``): how many T_u-overlap items
+    # from outside the φ prefix to inject so the LLM can promote text matches
+    # that φ ranked past ``llm_pool_cap``. ``0`` = φ prefix only (or weighted
+    # window when ``llm_w_tu`` / ``llm_w_co`` > 0).
+    llm_overlap_inject: int = 0
+    # Channel weights for ltr_llm listwise. Window = top ``llm_pool_cap`` by
+    # ``w_phi·z(φ) + w_tu·z(T_u overlap) + w_co·z(co)``. After the LLM permutes
+    # the window, the same mix plus ``w_llm·z(LLM-rank)`` produces the final
+    # order (φ stays the heaviest term). All ≥ 0; only relative ratios matter.
+    llm_w_phi: float = 1.0
+    llm_w_tu: float = 0.0
+    llm_w_co: float = 0.0
+    llm_w_llm: float = 0.0
+    # ``scorecard`` = LLM reason-then-pick; ``lexical_argmax`` = promote top-k
+    # overlap champs; ``argmax_llm_override`` = quality-first LLM (may ignore
+    # T_u/overlap gates) then fall back to lexical_argmax.
+    llm_pick_mode: Literal[
+        "scorecard", "lexical_argmax", "argmax_llm_override"
+    ] = "scorecard"
+    # When True: bypass LLM skip-gate (c_u / Stage-1 margin) and accept
+    # promote_swap merges that keep the frozen protect_n prefix (Eq. 21 soft).
+    llm_constraint_override: bool = False
+    # Lexical-first: if a π¹ near-miss beats displacee on T_u overlap by δ,
+    # promote_swap deterministically and skip LLM. Else fall back to reason-then-pick.
+    llm_lexical_first_enabled: bool = False
+    llm_lexical_first_rank_lo: int = 11
+    llm_lexical_first_rank_hi: int = 20
+    llm_lexical_first_overlap_delta: int = 1
+    # Blend Stage-1 vs LLM ranks (ablation only). Paper §III.F uses 0
+    # (Eq. 18 merge + Eq. 21). Enable only when llm_blend_beta > 0.
+    llm_blend_beta: float = 0.0
     # LOO / Stage-1 test history: ``train`` = train-only (legacy); ``train_valid``
     # = train+valid prefix when ranking the held-out test item (RecBole LOO).
     test_history: Literal["train", "train_valid"] = "train"
-    # Stage-1 backbone. ``era`` = in-repo TiSASRec (Amazon / Yelp-review default).
-    # ``recbole`` = AC-TSR RecBole TiSASRec bundle — **Yelp_AC only**.
+    # Stage-1 backbone. ``era`` = in-repo TiSASRec (legacy Option A).
+    # ``recbole`` = RecBole TiSASRec CE bundle (Option B default for all cats).
     stage1_backend: Literal["era", "recbole"] = "era"
     recbole_bundle_path: str = (
-        "data/processed/Yelp_AC/tisasrec_paper/recbole_stage1_bundle.pt"
+        "data/processed/Beauty_and_Personal_Care/tisasrec_option_b/recbole_stage1_bundle.pt"
     )
     recbole_vendor_root: str = "baseline/RecBole-TiSASRec/vendor"
+    # Path to RecBole train YAML (relative to repo root). Empty → convention
+    # ``baseline/RecBole-TiSASRec/configs/paper_tisasrec_<slug>.yaml``.
+    recbole_train_config: str = ""
     # Stage-2 preference text source. ``absa`` = review/ABSA pipeline (default);
     # ``item_metadata`` = RecBole ``.item`` categories/names (Yelp_AC).
     preference_source: Literal["absa", "item_metadata"] = "absa"
@@ -353,7 +457,7 @@ def category_scoped_artifact_paths(cfg: Config) -> list[tuple[str, str]]:
     ta = cfg.tisasrec_align
     absa = cfg.absa
     het = cfg.hettisasrec
-    return [
+    paths: list[tuple[str, str]] = [
         ("data.out_dir", cfg.data.out_dir),
         ("absa.targets_path", absa.targets_path),
         ("absa.cache_path", absa.cache_path),
@@ -369,6 +473,15 @@ def category_scoped_artifact_paths(cfg: Config) -> list[tuple[str, str]]:
         ("hettisasrec.aspect_graph_path", het.aspect_graph_path),
         ("hettisasrec.checkpoint_path", het.checkpoint_path),
     ]
+    # RecBole bundle is unused on the ERA backend; skip default Beauty path noise.
+    if getattr(ta, "stage1_backend", "era") == "recbole" and ta.recbole_bundle_path:
+        paths.append(("tisasrec_align.recbole_bundle_path", ta.recbole_bundle_path))
+    # φ LTR weights are only used by the current Stage-2 method.
+    if getattr(ta, "stage2_score", "llm") in {"ltr", "ltr_llm"}:
+        paths.append(
+            ("tisasrec_align.item_potential_ltr_path", ta.item_potential_ltr_path)
+        )
+    return paths
 
 
 def validate_category_path_isolation(cfg: Config) -> list[str]:
@@ -398,6 +511,7 @@ def validate_category_path_isolation(cfg: Config) -> list[str]:
         needs_token = (
             "/processed/" in norm
             or "/tisasrec_align/" in norm
+            or "/tisasrec_option_b/" in norm
             or "/hettisasrec/" in norm
             or norm.endswith("absa_cache.sqlite")
             or "absa_targets" in Path(norm).name

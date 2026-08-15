@@ -33,7 +33,7 @@ def test_from_config_uses_checkpoint_id_maps() -> None:
     ):
         from emorecagent.config import load_config
 
-        cfg = load_config("configs/emorecagent_stage1_baseline.yaml")
+        cfg = load_config("configs/legacy/emorecagent_stage1_baseline.yaml")
         rec = AlignFullRankRecommender.from_config(cfg, train=[], seed=0)
         mock_load_maps.assert_called_once_with(cfg.tisasrec_align.stage1_checkpoint_path)
         assert rec._id_maps.item_to_idx == ckpt_id_maps.item_to_idx

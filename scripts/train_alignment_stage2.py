@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -22,14 +23,37 @@ def _resolve_device(name: str) -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def _attach_package_logging(script_logger: logging.Logger) -> None:
+    for name in (
+        "emorecagent.tisasrec_align",
+        "emorecagent.tisasrec_align.train_stage2",
+    ):
+        lg = logging.getLogger(name)
+        lg.setLevel(logging.INFO)
+        lg.handlers.clear()
+        lg.propagate = False
+        for handler in script_logger.handlers:
+            lg.addHandler(handler)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/default.yaml")
     parser.add_argument("--log-dir", default="logs")
     parser.add_argument("--use-hash-encoder", action="store_true")
+    parser.add_argument(
+        "--log-every-batches",
+        type=int,
+        default=None,
+        help="Progress log interval within an epoch (default: ~10%% of batches)",
+    )
     args = parser.parse_args()
 
-    logger, _ = configure_run_logging("train_alignment_stage2", log_dir=args.log_dir)
+    logger, log_path = configure_run_logging(
+        "train_alignment_stage2", log_dir=args.log_dir
+    )
+    _attach_package_logging(logger)
+    logger.info("log_file=%s", log_path.resolve())
     cfg = load_config(args.config)
     ta = cfg.tisasrec_align
     device = _resolve_device(ta.device)
@@ -55,12 +79,14 @@ def main() -> int:
         lr=ta.alignment_lr,
         seed=cfg.experiment.seed,
         activation=ta.alignment_activation,
+        log_every_batches=args.log_every_batches,
     )
     logger.info(
-        "done tau=%.3f loss=%.4f ckpt=%s",
+        "done tau=%.3f loss=%.4f ckpt=%s log_file=%s",
         result.best_tau,
         result.best_loss,
         result.checkpoint_path,
+        log_path.resolve(),
     )
     return 0
 

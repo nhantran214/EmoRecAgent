@@ -208,7 +208,7 @@ experiment:
 		--out $(RESULTS_DIR)/svd.json \
 		--log-dir $(LOG_DIR)
 
-# Protocol B — paper-aligned baseline comparison (user_batch, full catalog, macro user-mean).
+# Full-catalog user-mean baseline comparison.
 # METHOD=svd|itemknn|popularity (default: svd)
 experiment-paper:
 	@mkdir -p $(LOG_DIR) $(RESULTS_DIR)/paper
@@ -219,35 +219,35 @@ experiment-paper:
 		--out $(RESULTS_DIR)/paper/$(or $(METHOD),svd).json \
 		--log-dir $(LOG_DIR)
 
-# Protocol B — LightGCN paper-aligned eval (user_batch, full catalog, macro user-mean @20).
+# LightGCN full-catalog user-mean eval.
 lightgcn-paper:
 	@mkdir -p baseline/LightGCN-PyTorch/logs results/paper
 	$(PYTHON) baseline/LightGCN-PyTorch/amazon/run_experiment.py \
 		--config baseline/LightGCN-PyTorch/configs/paper_lightgcn.yaml \
 		--out results/paper/lightgcn.json
 
-# Protocol B — XSimGCL paper-aligned eval (user_batch, full catalog, macro user-mean @20).
+# XSimGCL full-catalog user-mean eval.
 xsimgcl-paper:
 	@mkdir -p baseline/SimGCL-MixGCF/logs results/paper
 	$(PYTHON) baseline/SimGCL-MixGCF/amazon/run_experiment.py \
 		--config baseline/SimGCL-MixGCF/configs/paper_xsimgcl.yaml \
 		--out results/paper/xsimgcl.json
 
-# Protocol B — CORE paper-aligned eval (user_batch, full catalog, macro user-mean @20).
+# CORE full-catalog user-mean eval.
 core-paper:
 	@mkdir -p baseline/CORE/logs results/paper
 	$(PYTHON) baseline/CORE/amazon/run_experiment.py \
 		--config baseline/CORE/configs/paper_core.yaml \
 		--out results/paper/core.json
 
-# Protocol B — TiSASRec paper-aligned eval (user_batch, full catalog, macro user-mean @20).
+# TiSASRec full-catalog user-mean eval.
 tisasrec-paper:
 	@mkdir -p baseline/TiSASRec.pytorch/logs results/paper
 	$(PYTHON) baseline/TiSASRec.pytorch/amazon/run_experiment.py \
 		--config baseline/TiSASRec.pytorch/configs/paper_tisasrec.yaml \
 		--out results/paper/tisasrec.json
 
-# Protocol B — Agent4Rec full pipeline (train/valid/test CF + paper-scale simulation + comparison eval).
+# Agent4Rec full pipeline (train/valid/test CF + simulation + comparison eval).
 # ERA (Python 3.11+): pip install -e ".[dev]" then make agent4rec-setup
 agent4rec-setup:
 	$(PYTHON) -m pip install -r baseline/Agent4Rec/requirements-amazon.txt

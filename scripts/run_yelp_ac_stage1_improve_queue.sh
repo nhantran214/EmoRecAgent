@@ -20,7 +20,7 @@ MAIN=${EMOREC_MAIN:-/home/ai/ethan/EmoRecAgent}
 PY=${ERA_PYTHON:-/home/ai/anaconda3/envs/ERA/bin/python}
 LOG_DIR=${LOG_DIR:-$MAIN/logs/Yelp_AC}
 OUT=${OUT:-$MAIN/results/Yelp_AC}
-CONFIG=$WT/configs/categories/Yelp_AC_tisasrec_paper.yaml
+CONFIG=$WT/configs/categories/Yelp_AC.yaml
 YAML=$CONFIG
 RUN_ROOT=data/processed/Yelp_AC/tisasrec_paper/runs
 

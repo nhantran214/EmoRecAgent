@@ -86,6 +86,6 @@ def test_yelp_ac_config_loads() -> None:
 
 
 def test_yelp_ac_paper_config_disables_dedup() -> None:
-    paper = load_config("configs/categories/Yelp_AC_tisasrec_paper.yaml")
+    paper = load_config("configs/legacy/categories/Yelp_AC_tisasrec_paper.yaml")
     assert paper.data.dedup_user_item is False
     assert paper.data.inter_path is not None

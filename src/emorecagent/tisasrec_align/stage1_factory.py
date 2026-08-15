@@ -28,10 +28,18 @@ def build_stage1_recommender(
 
     backend = getattr(ta, "stage1_backend", "era")
     if backend == "recbole":
-        if config.data.category != "Yelp_AC":
+        # Option B: RecBole TiSASRec CE for all five paper benchmarks.
+        allowed = {
+            "Beauty_and_Personal_Care",
+            "Sports_and_Outdoors",
+            "Toys_and_Games",
+            "Yelp",
+            "Yelp_AC",
+        }
+        if config.data.category not in allowed:
             raise ValueError(
                 "tisasrec_align.stage1_backend='recbole' is only supported for "
-                f"Yelp_AC (got category={config.data.category!r})"
+                f"{sorted(allowed)} (got category={config.data.category!r})"
             )
         return RecBoleStage1Recommender.from_config(config, train, seed=seed)
     if backend != "era":

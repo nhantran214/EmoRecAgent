@@ -84,7 +84,7 @@ eval:
   cumulative_history: false
   n_bootstrap: 1000
   n_seeds: 3
-  # Protocol A (EmoRecAgent ablations): per-row + verified ground truth.
+  # Ablation defaults (per-row). Category YAMLs override to user_batch / user_mean.
   verified_only: false
   protocol: per_row
   aggregation: row_mean
@@ -138,6 +138,8 @@ tisasrec_align:
   tu_mode: cache
   use_hash_encoder: false
   stage1_only: false
+  stage2_score: llm
+  item_potential_ltr_path: data/processed/Beauty_and_Personal_Care/tisasrec_option_b/item_potential_ltr.npz
   stage2_mode: fusion
   rerank_pool_k: 100
   llm_pool_cap: 40
@@ -152,7 +154,7 @@ tisasrec_align:
   lr: 0.001
   alignment_lr: 0.001
   batch_size: 512
-  alignment_batch_size: 64
+  alignment_batch_size: 2048
   steps_per_epoch: auto   # baseline: max(n_users // batch_size, 1)
   early_stop_patience: 30
   early_stop_metric: valid_link_hr@10

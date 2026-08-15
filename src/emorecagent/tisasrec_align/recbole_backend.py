@@ -1,8 +1,9 @@
-"""RecBole TiSASRec as Yelp_AC Stage-1 backbone (AC-TSR fork).
+"""RecBole TiSASRec as Stage-1 backbone (AC-TSR fork).
 
-Amazon / Yelp-review tracks keep the in-repo ERA TiSASRec path. This module
-loads a RecBole checkpoint exported into an EmoRecAgent bundle and scores via
-the official RecBole ``TiSASRec.forward`` + item embeddings.
+Used for Yelp_AC (paper track) and Yelp (reviews) Option B. Amazon / Yelp
+Option A keep the in-repo ERA TiSASRec path. This module loads a RecBole
+checkpoint exported into an EmoRecAgent bundle and scores via the official
+RecBole ``TiSASRec.forward`` + item embeddings.
 """
 
 from __future__ import annotations
@@ -356,3 +357,53 @@ class RecBoleStage1Recommender(Recommender):
     ) -> list[str]:
         scores = self.score(user_id, candidates, query_ts_ms=query_ts_ms)
         return sorted(candidates, key=lambda i: (-scores.get(i, 0.0), i))
+
+    def user_state(
+        self,
+        user_id: str,
+        *,
+        query_ts_ms: int | None = None,
+    ) -> np.ndarray:
+        """Return sequential user vector s_u (paper §III.B / III.F)."""
+        if query_ts_ms is not None:
+            self.prepare_user_query(user_id, query_ts_ms)
+        if user_id not in self._query_ctx:
+            raise RuntimeError(
+                f"prepare_user_query not called for user_id={user_id!r}"
+            )
+        seq, times, length = self._query_ctx[user_id]
+        if length <= 0:
+            hidden = int(self._model.item_embedding.embedding_dim)
+            return np.zeros(hidden, dtype=np.float64)
+        item_seq = torch.as_tensor(seq, dtype=torch.long, device=self._device).unsqueeze(
+            0
+        )
+        time_seq = torch.as_tensor(
+            times, dtype=torch.float32, device=self._device
+        ).unsqueeze(0)
+        item_seq_len = torch.tensor([length], dtype=torch.long, device=self._device)
+        time_matrix = self._model.get_time_matrix(time_seq)
+        with torch.no_grad():
+            seq_out = self._model.forward(item_seq, item_seq_len, time_matrix)
+        return seq_out.squeeze(0).detach().cpu().numpy().astype(np.float64)
+
+    def item_embeddings(
+        self, items: list[str]
+    ) -> dict[str, np.ndarray]:
+        """Item embedding rows e_i for fused pool scoring (Eq. 17)."""
+        emb = self._model.item_embedding.weight.detach().cpu().numpy()
+        out: dict[str, np.ndarray] = {}
+        for item in items:
+            loc = self._item_to_idx.get(item)
+            if loc is None:
+                continue
+            out[item] = emb[int(loc)].astype(np.float64)
+        return out
+
+    def export_e_i_matrix(self, out_path: str | Path) -> Path:
+        """Save RecBole item embedding table for InfoNCE alignment training."""
+        path = Path(out_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        weight = self._model.item_embedding.weight.detach().cpu()
+        torch.save(weight, path)
+        return path

@@ -29,7 +29,7 @@ def tiny_splits(tmp_path):
 
 def test_build_recommender_rerank_mode(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("EMOREC_DATA_OUT_DIR", str(tmp_path))
-    cfg = load_config("configs/emorecagent_align.yaml")
+    cfg = load_config("configs/legacy/emorecagent_align.yaml")
     from emorecagent.data.types import Interaction
 
     train = [Interaction(user_id="u1", item="i1", rating=5.0, timestamp=100)]
@@ -54,7 +54,7 @@ def test_rerank_user_batch_eval_smoke(monkeypatch, tmp_path, tiny_splits) -> Non
 
     with (
         patch(
-            "emorecagent.tisasrec_align.rerank_recommender.AlignFullRankRecommender.from_config"
+            "emorecagent.tisasrec_align.rerank_recommender.build_stage1_recommender"
         ) as mock_stage1_cls,
         patch(
             "emorecagent.tisasrec_align.rerank_recommender.load_tu_cache",
@@ -90,7 +90,7 @@ def test_rerank_user_batch_eval_smoke(monkeypatch, tmp_path, tiny_splits) -> Non
                 return ["i1", "i2", "i3"]
 
         mock_stage1_cls.return_value = _Stub()
-        cfg = load_config("configs/emorecagent_align.yaml")
+        cfg = load_config("configs/legacy/emorecagent_align.yaml")
         train = load_split_jsonl(train_path)
         test = load_split_jsonl(test_path)
         rec = RerankAlignRecommender.from_config(cfg, train, seed=0)

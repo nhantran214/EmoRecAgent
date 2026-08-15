@@ -1,0 +1,35 @@
+# Category overlay: Yelp Open Dataset (same hyperparameters / method as default).
+# Points at the unpacked official dump under raw/yelp_dataset — build_dataset
+# normalizes native Yelp review rows (business_id/stars/date) on the fly.
+# Usage: --config configs/categories/Yelp.yaml
+extends: ../../default.yaml
+
+experiment:
+  name: Yelp
+
+data:
+  category: Yelp
+  review_path: data/yelp-open-dataset/raw/yelp_dataset
+  meta_path: data/yelp-open-dataset/raw/yelp_dataset
+  out_dir: data/processed/Yelp
+  # Denser graph than Amazon defaults (10-core).
+  k_core: 20
+
+absa:
+  targets_path: data/processed/Yelp/absa_targets.jsonl
+  cache_path: data/processed/Yelp/absa_cache.sqlite
+  gold_path: data/labeled/Yelp/absa_gold.jsonl
+  summary_path: results/Yelp/absa_summary.json
+  preview_html_path: results/Yelp/absa_preview.html
+
+tisasrec_align:
+  stage1_checkpoint_path: data/processed/Yelp/tisasrec_align/stage1_checkpoint.pt
+  e_i_matrix_path: data/processed/Yelp/tisasrec_align/e_i_matrix.pt
+  alignment_checkpoint_path: data/processed/Yelp/tisasrec_align/alignment_mlp.pt
+  tu_cache_path: data/processed/Yelp/tisasrec_align/tu_cache.jsonl
+  cross_user_lookup_path: data/processed/Yelp/tisasrec_align/cross_user_lookup.json
+
+hettisasrec:
+  aspect_vocab_path: data/processed/Yelp/hettisasrec/aspect_vocab.json
+  aspect_graph_path: data/processed/Yelp/hettisasrec/aspect_graph.pt
+  checkpoint_path: data/processed/Yelp/hettisasrec/checkpoint.pt
